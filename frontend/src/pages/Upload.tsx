@@ -28,9 +28,7 @@ export const UploadPage: Component = () => {
 	const isFileUploadImplemented = false; // Feature flag for file upload
 
 	// Text Input state
-	const [textContent, setTextContent] = createSignal(`(= (fact 0) 1)
-(= (fact $n) (* $n (fact (- $n 1))))
-(fact 5)`)
+	const [textContent, setTextContent] = createSignal("()")
 	const [textFormat, setTextFormat] = createSignal("metta")
 
 	// Common state
@@ -319,9 +317,9 @@ export const UploadPage: Component = () => {
 										<strong>Example MeTTa expressions:</strong>
 									</p>
 									<ul class="list-disc list-inside mt-1 space-y-1">
-										<li>(= (fact 0) 1)</li>
-										<li>(= (fact $n) (* $n (fact (- $n 1))))</li>
-										<li>(fact 5)</li>
+										<li>(Name "Tony Stark")</li>
+										<li>(AlterEgo "Iron Man")</li>
+										<li>(Ability "Shooting")</li>
 									</ul>
 								</div>
 							</div>
