@@ -16,7 +16,6 @@ import Key from "lucide-solid/icons/key"
 import NotImplemented from "~/components/common/NotImplemented";
 import ClearPage from "./Clear";
 import Trash2 from "lucide-solid/icons/trash-2";
-import { C } from "node_modules/@kobalte/core/dist/collapsible-trigger-6358fcd4";
 
 
 const sidebarSections = [
@@ -31,7 +30,7 @@ const sidebarSections = [
 			component: LoadPage
 		},
 		{ id: "clear", label: "Clear", icon: Trash2, to: "/clear", component: ClearPage },
-	],
+		],
 	},
 	{
 		title: "Set and Algebraic Operations",

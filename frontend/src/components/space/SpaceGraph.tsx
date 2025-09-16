@@ -3,7 +3,7 @@ import coseBilkent from 'cytoscape-cose-bilkent';
 import { Accessor, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { elementsToCyInput, flattenNodes, initEdge, initNode, initNodesFromApiResponse, SpaceNode } from '~/lib/space';
 import { exploreSpace } from '~/lib/api';
-import { formatedNamespace, namespace } from '~/lib/state';
+import { formatedNamespace } from '~/lib/state';
 import parse from 's-expression';
 
 cytoscape.use(coseBilkent);

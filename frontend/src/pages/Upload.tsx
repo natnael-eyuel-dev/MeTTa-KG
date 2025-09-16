@@ -13,7 +13,7 @@ import Link from 'lucide-solid/icons/link'
 import FileText from 'lucide-solid/icons/file-text'
 import File from 'lucide-solid/icons/file'
 import { importSpace, importData, uploadTextToSpace} from '~/lib/api';
-import { formatedNamespace, namespace } from "~/lib/state"
+import { formatedNamespace } from "~/lib/state"
 import NotImplemented from "~/components/common/NotImplemented"
 
 

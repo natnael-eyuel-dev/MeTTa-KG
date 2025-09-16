@@ -13,7 +13,7 @@ import CytoscapeCanvas, { CytoscapeCanvasHandle } from "~/components/space/Space
 import '../styles/variables.css';
 import '../styles/components.css';
 import { exploreSpace } from "~/lib/api"
-import { namespace } from "~/lib/state"
+import { formatedNamespace, namespace } from "~/lib/state"
 
 const LoadPage = () => {
 	// Editor state
@@ -41,13 +41,13 @@ const LoadPage = () => {
 
 	const [subSpace] = createResource(
 		() => ({
-			path: namespace(),	
+			path: namespace(),
 			expr: pattern(),
 			token: Uint8Array.from([])
 		}),
 		async ({ path, expr, token }) => { // Destructure the object
-			let pathStr = `/${path.join("/")}`
-			let res = await exploreSpace(pathStr, expr, token);
+			console.log("formated namespace: ", formatedNamespace())
+			let res = await exploreSpace(formatedNamespace(), expr, token);
 			res = JSON.parse(res as any);
 			return res;
 		}

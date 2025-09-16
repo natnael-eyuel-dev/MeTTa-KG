@@ -210,8 +210,6 @@ function serializeSExpr(expr: SExpr): string {
     
       // Parse the S-expression to extract patterns and templates  
       const { patterns, templates } = parseTransformExpression(sExpr());  
-      console.log("Parsed patterns:", patterns);  
-      console.log("Parsed templates:", templates);
 
       const transformation: Transformation = {  
         space: spacePath,  
