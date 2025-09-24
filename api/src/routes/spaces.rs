@@ -3,14 +3,9 @@ use rocket::serde::json::Json;
 use rocket::tokio::io::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use url::Url;
-use uuid::Uuid;
-use rocket::tokio::io::AsyncReadExt;
 use rocket::response::stream::{EventStream, Event};
-use rocket::tokio::time::{sleep, Duration};
+use rocket::tokio::time::{Duration};
 use rocket::tokio::time::interval;
-use tokio_stream::wrappers::IntervalStream;
-use rocket::response::Responder;
-use futures::stream::{Stream, StreamExt};
 
 use rocket::response::status::Custom;
 use rocket::{get, post, Data};
@@ -51,7 +46,7 @@ pub struct ExportInput {
 #[post("/spaces/transform-sse/<path..>", data = "<transformation>")]
 pub async fn transform_sse(
     token: Token,
-    _path: PathBuf, 
+    path: PathBuf, 
     transformation: Json<Transformation>,
 ) -> Result<EventStream![Event + 'static], Status> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
@@ -77,7 +72,6 @@ pub async fn transform_sse(
         Ok(_) => {
             // create the SSE stream
             let space_path = transformation.space.clone();
-            let token_clone = token.clone();
             
             let stream = EventStream! {
                 yield Event::data("Transform initiated successfully").event("status");
