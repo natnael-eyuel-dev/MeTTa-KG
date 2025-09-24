@@ -6,6 +6,12 @@ use std::io::prelude::*;
 use url::Url;
 use uuid::Uuid;
 use rocket::tokio::io::AsyncReadExt;
+use rocket::response::stream::{EventStream, Event};
+use rocket::tokio::time::{sleep, Duration};
+use rocket::tokio::time::interval;
+use tokio_stream::wrappers::IntervalStream;
+use rocket::response::Responder;
+use futures::stream::{Stream, StreamExt};
 
 use rocket::{get, post, Data};
 use rocket::response::status::Custom;
@@ -36,12 +42,13 @@ pub struct ExploreOutput {
     pub token: String
 }
 
-#[post("/spaces/<path..>", data = "<transformation>", rank = 2)]
-pub async fn transform(
+// sse endpoint for real-time transformation updates
+#[post("/spaces/transform-sse/<path..>", data = "<transformation>")]
+pub async fn transform_sse(
     token: Token,
     path: PathBuf,
     transformation: Json<Transformation>,
-) -> Result<Json<bool>, Status> {
+) -> Result<EventStream![Event + 'static], Status> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
 
     if !transformation.space.starts_with(token_namespace)
@@ -60,10 +67,86 @@ pub async fn transform(
                 .templates(transformation.templates.clone()),
         );
 
+    // start the transformation
     match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
+        Ok(_) => {
+            // create the SSE stream
+            let space_path = transformation.space.clone();
+            let token_clone = token.clone();
+            
+            let stream = EventStream! {
+                yield Event::data("Transform initiated successfully").event("status");
+                
+                // poll for completion
+                let mut interval = interval(Duration::from_secs(3));
+                loop {
+                    interval.tick().await;
+                    
+                    let explore_request = ExploreRequest::new()
+                        .namespace(space_path.clone())
+                        .pattern("$x".to_string())
+                        .token("".to_string());
+                    
+                    match mork_api_client.dispatch(explore_request).await {
+                        Ok(_) => {
+                            yield Event::data("Transform completed successfully").event("complete");
+                            break;
+                        },
+                        Err(err_status) if err_status == Status::ServiceUnavailable => {
+                            yield Event::data("Transform in progress...").event("progress");
+                        },
+                        Err(e) => {
+                            yield Event::data(format!("Transform failed: {:?}", e)).event("error");
+                            break;
+                        }
+                    }
+                }
+            };
+            
+            Ok(stream)
+        },
         Err(e) => Err(e),
     }
+}
+
+// sse endpoint for monitoring transformation status
+#[get("/spaces/transform-status/<path..>?<token>")]
+pub async fn transform_status(
+    path: PathBuf,
+    token: String,
+) -> Result<EventStream![Event + 'static], Status> {
+
+    let mork_api_client = MorkApiClient::new();
+    
+    let stream = EventStream! {
+        yield Event::data("Monitoring transformation status").event("status");
+        
+        let mut interval = interval(Duration::from_secs(3));
+        loop {
+            interval.tick().await;
+            
+            let explore_request = ExploreRequest::new()
+                .namespace(path.clone())
+                .pattern("$x".to_string())
+                .token("".to_string());
+            
+            match mork_api_client.dispatch(explore_request).await {
+                Ok(_) => {
+                    yield Event::data("Transform completed successfully").event("complete");
+                    break;
+                },
+                Err(err_status) if err_status == Status::ServiceUnavailable => {
+                    yield Event::data("Transform in progress...").event("progress");
+                },
+                Err(e) => {
+                    yield Event::data(format!("Transform failed: {:?}", e)).event("error");
+                    break;
+                }
+            }
+        }
+    };
+    
+    Ok(stream)
 }
 
 #[post("/spaces/upload/<path..>", data = "<data>", rank=1)]
