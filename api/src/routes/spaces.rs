@@ -1,8 +1,7 @@
 use rocket::http::Status;
 use rocket::serde::json::Json;
+use rocket::tokio::io::AsyncReadExt;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::prelude::*;
 use url::Url;
 use uuid::Uuid;
 use rocket::tokio::io::AsyncReadExt;
@@ -13,14 +12,14 @@ use tokio_stream::wrappers::IntervalStream;
 use rocket::response::Responder;
 use futures::stream::{Stream, StreamExt};
 
-use rocket::{get, post, Data};
 use rocket::response::status::Custom;
+use rocket::{get, post, Data};
 use std::path::PathBuf;
 
 use crate::model::Token;
 use crate::mork_api::{
-    ExploreRequest, ImportRequest, MorkApiClient, ReadRequest, Request, TransformDetails, UploadRequest,
-    TransformRequest,
+    ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, MorkApiClient,
+    ReadRequest, Request, TransformDetails, TransformRequest, UploadRequest,
 };
 
 #[derive(Default, Serialize, Deserialize, Clone)]
@@ -39,14 +38,20 @@ pub struct ExploreInput {
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct ExploreOutput {
     pub expr: String,
-    pub token: String
+    pub token: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ExportInput {
+    pub pattern: String,
+    pub template: String,
 }
 
 // sse endpoint for real-time transformation updates
 #[post("/spaces/transform-sse/<path..>", data = "<transformation>")]
 pub async fn transform_sse(
     token: Token,
-    path: PathBuf,
+    _path: PathBuf, 
     transformation: Json<Transformation>,
 ) -> Result<EventStream![Event + 'static], Status> {
     let token_namespace = token.namespace.strip_prefix("/").unwrap();
@@ -159,20 +164,23 @@ pub async fn upload(
     if !path.starts_with(token_namespace) || !token.permission_write {
         return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
     }
-    
+
     let mut body = String::new();
-    if let Err(e) = data.open(rocket::data::ByteUnit::Mebibyte(20)).read_to_string(&mut body).await {
+    if let Err(e) = data
+        .open(rocket::data::ByteUnit::Mebibyte(20))
+        .read_to_string(&mut body)
+        .await
+    {
         eprintln!("Failed to read body: {e}");
-        return Err(Custom(Status::BadRequest, format!("Failed to read body: {e}")));
+        return Err(Custom(
+            Status::BadRequest,
+            format!("Failed to read body: {e}"),
+        ));
     }
 
     let pattern = "$x";
-    let namespace_str = path.to_str().unwrap_or("").trim_matches('/');
-    let template = if namespace_str.is_empty() {
-        "$x".to_string()
-    } else {
-        format!("({} $x)", namespace_str)
-    };
+    let namespace = crate::mork_api::Namespace::from(path.clone());
+    let template = namespace.with_namespace("$x");
 
     let mork_api_client = MorkApiClient::new();
     let request = UploadRequest::new()
@@ -183,7 +191,10 @@ pub async fn upload(
 
     match mork_api_client.dispatch(request).await {
         Ok(text) => Ok(Json(text)),
-        Err(e) => Err(Custom(Status::InternalServerError, format!("Failed to contact backend: {e}"))),
+        Err(e) => Err(Custom(
+            Status::InternalServerError,
+            format!("Failed to contact backend: {e}"),
+        )),
     }
 }
 
@@ -207,7 +218,7 @@ pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<boo
     }
 }
 
-#[get("/spaces/<path..>")]
+#[get("/spaces/<path..>", rank = 2)]
 pub async fn read(token: Token, path: PathBuf) -> Result<Json<String>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
         return Err(Status::Unauthorized);
@@ -239,6 +250,50 @@ pub async fn explore(
     println!("explore path: {:?}", request.path());
 
     let response = mork_api_client.dispatch(request).await.map(Json);
-    println!("explore response: {:?}", response);
+    println!("explore response: {response:?}");
     response
+}
+
+#[post("/spaces/export/<path..>", data = "<export_input>")]
+pub async fn export(
+    token: Token,
+    path: PathBuf,
+    export_input: Json<ExportInput>,
+) -> Result<Json<String>, Status> {
+    if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_read {
+        return Err(Status::Unauthorized);
+    }
+
+    let mork_api_client = MorkApiClient::new();
+    let request = ExportRequest::new()
+        .namespace(path)
+        .pattern(export_input.pattern.clone())
+        .template(export_input.template.clone())
+        .format(ExportFormat::Metta);
+
+    println!("Dispatching export request to Mork: {}", request.path());
+
+    match mork_api_client.dispatch(request).await {
+        Ok(data) => {
+            println!("Received export response from Mork: {data:?}");
+            Ok(Json(data))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+#[get("/spaces/clear/<path..>")]
+pub async fn clear(token: Token, path: PathBuf) -> Result<Json<bool>, Status> {
+    let token_namespace = token.namespace.strip_prefix("/").unwrap();
+    if !path.starts_with(token_namespace) || !token.permission_write {
+        return Err(Status::Unauthorized);
+    }
+
+    let mork_api_client = MorkApiClient::new();
+    let request = ClearRequest::new().namespace(path).expr("$x".to_string());
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
 }

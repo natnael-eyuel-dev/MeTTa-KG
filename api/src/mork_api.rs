@@ -1,10 +1,9 @@
 use reqwest::{Client, Method};
 use rocket::http::Status;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::env;
 use std::path::PathBuf;
-use std::any::Any;
-use url::form_urlencoded::byte_serialize;
 
 #[derive(Serialize, Deserialize, Clone)]
 #[allow(dead_code)]
@@ -47,15 +46,22 @@ impl Namespace {
     }
 
     pub fn encoded(&self) -> String {
-        self.ns.to_string_lossy().replace("/", "|")
+        let path_str = self.ns.to_string_lossy();
+        let trimmed = path_str.trim_matches('/');
+        if trimmed.is_empty() {
+            "|".to_string()
+        } else {
+            trimmed.replace('/', "|")
+        }
     }
 
     pub fn with_namespace(&self, value: &str) -> String {
-        format!("({} {})", self.encoded(), value)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.ns.starts_with("/") && self.ns.ends_with("/")
+        let encoded_ns = self.encoded();
+        if encoded_ns.is_empty() {
+            value.to_string()
+        } else {
+            format!("({encoded_ns} {value})")
+        }
     }
 }
 
@@ -108,7 +114,7 @@ impl MorkApiClient {
         let url = format!("{}{}", self.base_url, request.path());
         let mut http_request = self.client.request(request.method(), &url);
 
-        if request.path().starts_with("/upload/") {
+        if request.path().starts_with("/upload/") || request.path() == "/transform" {
             if let Some(body) = request.body() {
                 if let Some(body_str) = (&body as &dyn Any).downcast_ref::<String>() {
                     http_request = http_request
@@ -127,12 +133,12 @@ impl MorkApiClient {
             Ok(resp) => match resp.text().await {
                 Ok(text) => Ok(text),
                 Err(e) => {
-                    eprintln!("Error reading Mork API response text: {}", e);
+                    eprintln!("Error reading Mork API response text: {e}");
                     Err(Status::InternalServerError)
                 }
             },
             Err(e) => {
-                eprintln!("Error sending request to Mork API: {}", e);
+                eprintln!("Error sending request to Mork API: {e}");
                 Err(Status::InternalServerError)
             }
         }
@@ -207,18 +213,18 @@ impl TransformRequest {
 }
 
 impl Request for TransformRequest {
-    type Body = ();
+    type Body = String;
 
     fn method(&self) -> Method {
         Method::POST
     }
 
     fn path(&self) -> String {
-        format!("/transform/{}", &self.transform_code())
+        "/transform".to_string()
     }
 
     fn body(&self) -> Option<Self::Body> {
-        Some(())
+        Some(self.transform_code())
     }
 }
 
@@ -261,8 +267,7 @@ impl Request for ImportRequest {
             "/import/{}/{}/?uri={}",
             "$x",
             self.namespace.with_namespace(
-                &self
-                    .transform_input
+                self.transform_input
                     .templates
                     .first()
                     .unwrap_or(&"$x".to_string())
@@ -432,21 +437,128 @@ impl Request for UploadRequest {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use httpmock::prelude::*;
-    use std::path::PathBuf;
+#[derive(Default)]
+pub struct ExportRequest {
+    namespace: Namespace,
+    pattern: String,
+    template: String,
+    format: Option<ExportFormat>,
+    max_write: Option<usize>,
+}
 
-    #[test]
-    fn test_encoded_space() {
-        let ns = Namespace::new();
-        assert_eq!(ns.encoded(), "|");
+impl ExportRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-        let ns_with_value = Namespace::from(PathBuf::from("/foo/bar/"));
-        assert_eq!(ns_with_value.encoded(), "|foo|bar|");
+    pub fn namespace(mut self, ns: PathBuf) -> Self {
+        self.namespace = Namespace::from(if ns.to_string_lossy().is_empty() {
+            PathBuf::from("/")
+        } else {
+            ns.to_path_buf()
+        });
+        self
+    }
 
-        let ns_with_no_slashes = Namespace::from(PathBuf::from("foo"));
-        assert_eq!(ns_with_no_slashes.encoded(), "foo");
+    pub fn pattern(mut self, pattern: String) -> Self {
+        self.pattern = pattern;
+        self
+    }
+
+    pub fn template(mut self, template: String) -> Self {
+        self.template = template;
+        self
+    }
+
+    pub fn format(mut self, format: ExportFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+}
+
+impl Request for ExportRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        let mut path = format!(
+            "/export/{}/{}",
+            urlencoding::encode(&self.namespace.with_namespace(&self.pattern)),
+            urlencoding::encode(&self.template)
+        );
+
+        let mut query_params = Vec::new();
+
+        if let Some(format) = &self.format {
+            let format_str = match format {
+                ExportFormat::Metta => "metta",
+                ExportFormat::Json => "json",
+                ExportFormat::Csv => "csv",
+                ExportFormat::Raw => "raw",
+            };
+            query_params.push(format!("format={format_str}"));
+        }
+
+        if let Some(max_write) = self.max_write {
+            query_params.push(format!("max_write={max_write}"));
+        }
+
+        if !query_params.is_empty() {
+            path.push_str("/?");
+            path.push_str(&query_params.join("&"));
+        }
+
+        path
+    }
+
+    fn body(&self) -> Option<Self::Body> {
+        None
+    }
+}
+
+#[derive(Default)]
+pub struct ClearRequest {
+    namespace: Namespace,
+    expr: String,
+}
+
+impl ClearRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn namespace(mut self, ns: PathBuf) -> Self {
+        self.namespace = Namespace::from(if ns.to_string_lossy().is_empty() {
+            PathBuf::from("/")
+        } else {
+            ns.to_path_buf()
+        });
+        self
+    }
+
+    pub fn expr(mut self, expr: String) -> Self {
+        self.expr = expr;
+        self
+    }
+}
+
+impl Request for ClearRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        let expr_to_use = self.namespace.with_namespace(&self.expr);
+
+        format!("/clear/{}", urlencoding::encode(&expr_to_use))
+    }
+
+    fn body(&self) -> Option<Self::Body> {
+        None
     }
 }

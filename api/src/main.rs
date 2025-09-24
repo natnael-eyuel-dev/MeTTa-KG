@@ -1,6 +1,5 @@
-use rocket::fs::FileServer;
 use rocket::http::Method;
-use rocket::{self, launch, routes, tokio, Build, Rocket};
+use rocket::{self, launch, routes, Build, Rocket};
 use rocket_cors::AllowedOrigins;
 
 mod db;
@@ -49,7 +48,9 @@ fn rocket() -> Rocket<Build> {
                 routes::spaces::import,
                 routes::spaces::transform_sse,
                 routes::spaces::transform_status,
-                routes::spaces::explore
+                routes::spaces::explore,
+                routes::spaces::export,
+                routes::spaces::clear,
             ],
         )
         // .mount("/public", FileServer::from("static"))
