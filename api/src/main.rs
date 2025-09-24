@@ -47,7 +47,8 @@ fn rocket() -> Rocket<Build> {
                 routes::spaces::read,
                 routes::spaces::upload,
                 routes::spaces::import,
-                routes::spaces::transform,
+                routes::spaces::transform_sse,
+                routes::spaces::transform_status,
                 routes::spaces::explore
             ],
         )
