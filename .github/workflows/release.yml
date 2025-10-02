@@ -1,0 +1,96 @@
+name: CI Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get version
+        id: version
+        run: echo "version=$(jq -r .version frontend/package.json)" >> $GITHUB_OUTPUT
+
+  build-frontend:
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  build-api:
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y musl-dev g++ libpq-dev libssl-dev pkg-config
+      - run: rustup target add x86_64-unknown-linux-musl
+      - run: cd api && cargo build --release --target x86_64-unknown-linux-musl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-binary
+          path: api/target/x86_64-unknown-linux-musl/release/api
+
+  build-mork:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load env
+        run: export $(cat .github/env | xargs)
+      - name: Clone MORK
+        run: git clone https://github.com/trueagi-io/MORK.git mork
+      - name: Checkout commit
+        run: cd mork && git checkout $MORK_COMMIT_HASH
+      - name: Clone PathMap
+        run: git clone --branch master https://github.com/Adam-Vandervorst/PathMap.git /PathMap
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cd mork && cargo build --release -p mork_server --bin mork_server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mork-binary
+          path: mork/target/release/mork_server
+
+  release:
+    needs: [get-version, build-frontend, build-api, build-mork]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend-dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-binary
+          path: api-binary
+      - uses: actions/download-artifact@v4
+        with:
+          name: mork-binary
+          path: mork-binary
+      - name: Zip frontend
+        run: zip -r frontend.zip frontend-dist/
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.get-version.outputs.version }}
+          name: Release v${{ needs.get-version.outputs.version }}
+          files: |
+            frontend.zip
+            api-binary/api
+            mork-binary/mork_server
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
