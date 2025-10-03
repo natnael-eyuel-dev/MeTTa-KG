@@ -78,7 +78,7 @@ jobs:
       # https://github.com/docker/build-push-action
       - name: Debug SSH Agent
         run: ssh-add -l
-      - name: Build and push Docker image
+      - name: Build and push Docker image (binary-based)
         id: build-and-push
         env: 
           CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -93,6 +93,7 @@ jobs:
           cache-to: type=gha,mode=max
           ssh: |
             default=${{ env.SSH_AUTH_SOCK }}
+          file: Dockerfile
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
       # repository is public to avoid leaking data.  If you would like to publish
