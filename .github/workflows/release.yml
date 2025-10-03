@@ -67,6 +67,10 @@ jobs:
 
       - name: Create GitHub Release
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          gh release create "${GITHUB_REF##*/}" --target "$RELEASE_COMMIT" --notes "Release $GITHUB_REF" dist/*
+          gh release create "${GITHUB_REF##*/}" \
+            --target "$RELEASE_COMMIT" \
+            --notes "Release $GITHUB_REF" \
+            dist/*
