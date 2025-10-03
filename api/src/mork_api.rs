@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::env;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::time::{interval, Duration};
+use rocket::response::stream::{Event, EventStream};
 
 #[derive(Serialize, Deserialize, Clone)]
 #[allow(dead_code)]
@@ -143,6 +146,32 @@ impl MorkApiClient {
             }
         }
     }
+
+    pub async fn status_stream_arc(
+        client: Arc<Self>,
+        namespace: PathBuf,
+        token: String,
+    ) -> Result<EventStream![Event + 'static], Status> {
+        let request = StatusRequest::new()
+            .namespace(namespace)
+            .token(token);
+
+        let mut ticker = interval(Duration::from_millis(500));
+
+        let stream = EventStream! {
+            loop {
+                ticker.tick().await;
+
+                let resp = client.dispatch(request.clone()).await;
+                match resp {
+                    Ok(text) => yield Event::data(text),
+                    Err(_) => yield Event::data("{\"state\":\"error\"}"),
+                }
+            }
+        };
+
+        Ok(stream)
+    }
 }
 
 pub trait Request {
@@ -225,6 +254,48 @@ impl Request for TransformRequest {
 
     fn body(&self) -> Option<Self::Body> {
         Some(self.transform_code())
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct StatusRequest {
+    namespace: Namespace,
+    token: String,
+}
+
+impl StatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn namespace(mut self, ns: PathBuf) -> Self {
+        self.namespace = Namespace::from(if ns.to_string_lossy().is_empty() {
+            PathBuf::from("/")
+        } else {
+            ns.to_path_buf()
+        });
+        self
+    }
+
+    pub fn token(mut self, token: String) -> Self {
+        self.token = token;
+        self
+    }
+}
+
+impl Request for StatusRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        format!(
+            "/status/{}/{}",
+            self.namespace.encoded(),
+            self.token
+        )
     }
 }
 

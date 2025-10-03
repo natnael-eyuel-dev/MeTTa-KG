@@ -3,23 +3,24 @@ use rocket::serde::json::Json;
 use rocket::tokio::io::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use url::Url;
-use rocket::response::stream::{EventStream, Event};
-use rocket::tokio::time::{Duration};
-use rocket::tokio::time::interval;
+use rocket::response::stream::{Event, EventStream};
 
+use rocket::data::ByteUnit;
 use rocket::response::status::Custom;
 use rocket::{get, post, Data};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::model::Token;
 use crate::mork_api::{
     ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, MorkApiClient,
     ReadRequest, Request, TransformDetails, TransformRequest, UploadRequest,
 };
+use crate::mork_api::StatusRequest;
 
-#[derive(Default, Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug)]
 pub struct Transformation {
-    pub space: PathBuf,
+    pub space: String,
     pub patterns: Vec<String>,
     pub templates: Vec<String>,
 }
@@ -42,110 +43,95 @@ pub struct ExportInput {
     pub template: String,
 }
 
-// sse endpoint for real-time transformation updates
-#[post("/spaces/transform-sse/<path..>", data = "<transformation>")]
-pub async fn transform_sse(
-    token: Token,
-    path: PathBuf, 
-    transformation: Json<Transformation>,
-) -> Result<EventStream![Event + 'static], Status> {
-    let token_namespace = token.namespace.strip_prefix("/").unwrap();
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct TaskStatus {
+    pub state: String,   
+    pub details: Option<String>,
+}
 
-    if !transformation.space.starts_with(token_namespace)
-        || !token.permission_read
-        || !token.permission_write
-    {
-        return Err(Status::Unauthorized);
+// initiate a transformation task and get status updates via SSE
+#[post("/spaces/status-sse/<_path..>", data = "<data>")]
+pub async fn status_sse(
+    token: Token,
+    _path: PathBuf,
+    data: Data<'_>,
+) -> Result<EventStream![Event + 'static], Custom<String>> {
+
+    // read raw body
+    let mut body = String::new();
+    data.open(ByteUnit::Mebibyte(2))
+        .read_to_string(&mut body)
+        .await
+        .map_err(|e| Custom(Status::BadRequest, format!("Failed to read body: {e}")))?;
+
+    // parse JSON manually
+    let mut transformation: Transformation =
+        serde_json::from_str(&body).map_err(|e| Custom(Status::BadRequest, format!("Invalid JSON: {e}")))?;
+
+    transformation.space = _path.to_string_lossy().to_string();
+    println!("Final transformation.space: {}", transformation.space);
+
+
+    // override space with URL path if needed
+    transformation.space = _path.to_string_lossy().to_string();
+
+    // permission check
+    let token_namespace = token.namespace.strip_prefix("/").unwrap();
+    let space_path = PathBuf::from(&transformation.space);
+    if !space_path.starts_with(token_namespace) || !token.permission_read || !token.permission_write {
+        return Err(Custom(Status::Unauthorized, "Unauthorized".to_string()));
     }
 
-    let mork_api_client = MorkApiClient::new();
+    // dispatch transformation task
+    let mork_api_client = Arc::new(MorkApiClient::new());
     let request = TransformRequest::new()
-        .namespace(transformation.space.to_path_buf())
+        .namespace(space_path.clone())
         .transform_input(
             TransformDetails::new()
                 .patterns(transformation.patterns.clone())
                 .templates(transformation.templates.clone()),
         );
 
-    // start the transformation
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => {
-            // create the SSE stream
-            let space_path = transformation.space.clone();
-            
-            let stream = EventStream! {
-                yield Event::data("Transform initiated successfully").event("status");
-                
-                // poll for completion
-                let mut interval = interval(Duration::from_secs(3));
-                loop {
-                    interval.tick().await;
-                    
-                    let explore_request = ExploreRequest::new()
-                        .namespace(space_path.clone())
-                        .pattern("$x".to_string())
-                        .token("".to_string());
-                    
-                    match mork_api_client.dispatch(explore_request).await {
-                        Ok(_) => {
-                            yield Event::data("Transform completed successfully").event("complete");
-                            break;
-                        },
-                        Err(err_status) if err_status == Status::ServiceUnavailable => {
-                            yield Event::data("Transform in progress...").event("progress");
-                        },
-                        Err(e) => {
-                            yield Event::data(format!("Transform failed: {:?}", e)).event("error");
-                            break;
-                        }
-                    }
-                }
-            };
-            
-            Ok(stream)
-        },
-        Err(e) => Err(e),
-    }
+    mork_api_client
+        .dispatch(request)
+        .await
+        .map_err(|e| Custom(Status::InternalServerError, format!("Backend error: {e}")))?;
+
+    // return SSE stream
+    MorkApiClient::status_stream_arc(mork_api_client, space_path, token.code.clone())
+        .await
+        .map_err(|e| Custom(Status::InternalServerError, format!("SSE error: {e}")))
 }
 
-// sse endpoint for monitoring transformation status
-#[get("/spaces/transform-status/<path..>?<token>")]
-pub async fn transform_status(
+// get the current status of a transformation task
+#[get("/spaces/status/<path..>")]
+pub async fn status(
     path: PathBuf,
-    token: String,
-) -> Result<EventStream![Event + 'static], Status> {
+    token: Token,
+) -> Result<Json<TaskStatus>, Status> {
+    let token_namespace = token.namespace.strip_prefix("/").unwrap_or("");
+    
+    if !path.starts_with(token_namespace) || !token.permission_read {
+        return Err(Status::Unauthorized);
+    }
 
     let mork_api_client = MorkApiClient::new();
-    
-    let stream = EventStream! {
-        yield Event::data("Monitoring transformation status").event("status");
-        
-        let mut interval = interval(Duration::from_secs(3));
-        loop {
-            interval.tick().await;
-            
-            let explore_request = ExploreRequest::new()
-                .namespace(path.clone())
-                .pattern("$x".to_string())
-                .token("".to_string());
-            
-            match mork_api_client.dispatch(explore_request).await {
-                Ok(_) => {
-                    yield Event::data("Transform completed successfully").event("complete");
-                    break;
-                },
-                Err(err_status) if err_status == Status::ServiceUnavailable => {
-                    yield Event::data("Transform in progress...").event("progress");
-                },
-                Err(e) => {
-                    yield Event::data(format!("Transform failed: {:?}", e)).event("error");
-                    break;
-                }
-            }
+    let request = StatusRequest::new()
+        .namespace(path)
+        .token(token.code);
+
+    let resp = mork_api_client
+        .dispatch(request)
+        .await
+        .map_err(|_| Status::InternalServerError)?;
+
+    match serde_json::from_str::<TaskStatus>(&resp) {
+        Ok(status_obj) => Ok(Json(status_obj)),
+        Err(e) => {
+            eprintln!("Failed to parse status response: {e}");
+            Err(Status::InternalServerError)
         }
-    };
-    
-    Ok(stream)
+    }
 }
 
 #[post("/spaces/upload/<path..>", data = "<data>", rank=1)]
