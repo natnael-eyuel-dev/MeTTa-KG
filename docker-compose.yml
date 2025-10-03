@@ -1,23 +1,26 @@
 services:
   api:
     build: .
+    image: metta-kg:dev
     ports:
-      - "${METTA_KG_PORT}:${METTA_KG_PORT}"
+      - "${METTA_KG_PORT:-3030}:${METTA_KG_PORT:-3030}"
     depends_on:
       - db
       - mork
     environment:
+      DOCKER: "1"
       METTA_KG_DATABASE_URL: ${METTA_KG_DATABASE_URL}
       METTA_KG_SECRET: ${METTA_KG_SECRET}
       METTA_KG_MORK_URL: ${METTA_KG_MORK_URL}
-      METTA_KG_ORIGIN_URL: ${METTA_KG_ORIGIN_URL} 
-      ROCKET_ADDRESS: ${METTA_KG_ADDRESS}
-      ROCKET_PORT: ${METTA_KG_PORT}
-  db: 
+      METTA_KG_ORIGIN_URL: ${METTA_KG_ORIGIN_URL}
+      ROCKET_ADDRESS: ${METTA_KG_ADDRESS:-0.0.0.0}
+      ROCKET_PORT: ${METTA_KG_PORT:-3030}
+    command: ["/usr/local/bin/metta-kg", "--address", "0.0.0.0", "--port", "${METTA_KG_PORT:-3030}"]
+  db:
     image: "postgres"
     restart: always
-    ports: 
-      - "5432:5432"
+    ports:
+      - "5433:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
