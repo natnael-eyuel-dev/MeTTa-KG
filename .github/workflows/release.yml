@@ -30,6 +30,9 @@ jobs:
           which dist
           dist --version
 
+      - name: Init dist workspace
+        run: dist init
+
       - name: Setup Node for UI build
         uses: actions/setup-node@v4
         with:
