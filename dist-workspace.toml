@@ -15,8 +15,3 @@ targets = [
 
 [release]
 updater = true
-
-[[package]]
-name = "metta-kg"
-features = []
-artifacts = ["bin:metta-kg"]

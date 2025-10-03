@@ -1,8 +1,0 @@
-# Top-level cargo-dist configuration
-[workspace]
-members = ["api"]
-
-[dist]
-# Provide installers and updater
-installers = ["shell", "powershell", "msi", "pkg", "deb", "appimage"]
-updater = true 
