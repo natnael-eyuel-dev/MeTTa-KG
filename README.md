@@ -59,3 +59,66 @@ Documentation on translations can be found [here](./translations/README.md).
 ## Demo
 
 A live version of MeTTa-KG can be found at: https://metta-kg.vercel.app.
+
+# MeTTa-KG (Single-Binary Distribution)
+
+Fast, portable, low-friction runtime for MeTTa-KG. Ships as a single binary that embeds the web UI and exposes a clap-based CLI.
+
+## Install (one-liner)
+
+- macOS/Linux (curl):
+  curl -LSfs https://github.com/arist76/MeTTa-KG/releases/latest/download/install.sh | sh
+
+- Windows (PowerShell):
+  iwr https://github.com/arist76/MeTTa-KG/releases/latest/download/install.ps1 -useb | iex
+
+Installer will place `metta-kg` in ~/.cargo/bin or a platform-appropriate location.
+
+## Run (single command)
+
+metta-kg --address 127.0.0.1 --port 3030
+
+By default a browser window is opened at http://127.0.0.1:3030 (use --no-browser to disable).
+
+Flags:
+- --address <ip> (default 127.0.0.1)
+- --port <port> (default 3030)
+- --base-path <path> (default /)
+- --no-browser
+
+Subcommands:
+- run (default)
+- import (reserved)
+- query (reserved)
+
+Environment variables:
+- METTA_KG_DATABASE_URL (optional; default for local binary: postgresql://metta-kg-admin:password123@localhost:5432/metta-kg)
+- METTA_KG_SECRET
+- METTA_KG_MORK_URL
+
+Database URL selection:
+- Local binary: uses METTA_KG_DATABASE_URL if set, otherwise defaults to postgresql://metta-kg-admin:password123@localhost:5432/metta-kg
+- Docker: auto-detected via DOCKER=1 or /.dockerenv and uses postgresql://metta-kg-admin:password123@db:5432/metta-kg unless METTA_KG_DATABASE_URL is set
+
+## Binary vs Docker workflows
+
+Preferred: single binary
+- Build locally: (requires Rust and Node)
+  cd api && cargo run --release -- --address 127.0.0.1 --port 3030
+
+Docker (development)
+- docker build -t metta-kg:dev .
+- docker compose up
+
+The runtime container only ships the binary (and translations venv where needed).
+
+## Packaging and Releases
+
+- cargo-dist builds binaries for macOS, Linux, Windows with installers and updater.
+- Tag a release (vX.Y.Z) and GitHub Actions will build and publish artifacts.
+
+## Nix (optional)
+
+nix build
+
+This will build frontend and produce a deterministic metta-kg binary.
