@@ -47,18 +47,19 @@ impl<'r> FromRequest<'r> for Token {
             None => return Outcome::Error((Status::Unauthorized, AuthError::InvalidToken)),
         };
 
-        let token_str = token_header.strip_prefix("Bearer ").unwrap_or(token_header);
+        let token_str = token_header.strip_prefix("Bearer ").unwrap_or(token_header).to_string();
 
-        let conn = &mut establish_connection();
-
-        let result = tokens
-            .select(Token::as_select())
-            .filter(code.eq(token_str))
-            .first::<Token>(conn);
+        let result = rocket::tokio::task::spawn_blocking(move || {
+            let conn = &mut establish_connection();
+            tokens
+                .select(Token::as_select())
+                .filter(code.eq(token_str))
+                .first::<Token>(conn)
+        }).await;
 
         match result {
-            Ok(claims) => Outcome::Success(claims),
-            Err(_) => Outcome::Error((Status::Unauthorized, Self::Error::Unknown)),
+            Ok(Ok(claims)) => Outcome::Success(claims),
+            _ => Outcome::Error((Status::Unauthorized, Self::Error::Unknown)),
         }
 
     }
