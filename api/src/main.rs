@@ -75,11 +75,14 @@ fn index(ui: &State<UiConfig>) -> Option<(ContentType, Vec<u8>)> {
     let mut html = String::from_utf8(file.data.to_vec()).ok()?;
     let base = ui.base_path.trim_end_matches('/');
     if !base.is_empty() && base != "/" {
-        let prefix = base.to_string();
-        html = html.replace("href=\"/assets", &format!("href=\"{}/assets", prefix));
-        html = html.replace("src=\"/assets", &format!("src=\"{}/assets", prefix));
-        html = html.replace("href=\"/", &format!("href=\"{}/", prefix));
-        html = html.replace("src=\"/", &format!("src=\"{}/", prefix));
+        let base_href = format!("<base href=\"{}/\" />", base);
+        // replace or insert <base> tag in <head>
+        if let Some(pos) = html.find("<head>") {
+            html.insert_str(pos + "<head>".len(), &base_href);
+        } else {
+            // fallback if no <head> tag, though unlikely for valid html
+            html.insert_str(0, &base_href);
+        }
     }
     Some((ContentType::HTML, html.into_bytes()))
 }
