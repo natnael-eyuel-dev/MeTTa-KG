@@ -19,9 +19,7 @@ targets = [
 [[package]]
 name = "metta-kg"
 features = []
-
-[package.metta-kg]
-artifacts = ["bin:metta-kg"]
+artifacts = ["bin:metta-kg"]   
 
 [release]
 # Enable updater
