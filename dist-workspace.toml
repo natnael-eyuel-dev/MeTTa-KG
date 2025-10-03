@@ -1,0 +1,28 @@
+# cargo-dist configuration for MeTTa-KG single-binary distribution
+[workspace]
+# Which installers to build
+installers = ["shell", "powershell", "msi", "pkg", "deb", "appimage"]
+
+[dist]
+# Build targets for macOS, Linux, Windows
+# cargo-dist will cross-compile according to CI matrix
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+]
+
+# By default, package the `metta-kg` binary
+[[package]]
+name = "metta-kg"
+features = []
+
+[package.metta-kg]
+artifacts = ["bin:metta-kg"]
+
+[release]
+# Enable updater
+updater = true
