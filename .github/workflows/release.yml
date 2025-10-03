@@ -20,12 +20,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-dist
-        shell: bash
-        run: |
-          cargo install cargo-dist --locked
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          which cargo-dist
-          cargo-dist --version
+        uses: cargo-dist/action-setup-cargo-dist@v1
+
+      - name: Check cargo-dist version
+        run: cargo-dist --version
 
       - name: Setup Node for UI build
         uses: actions/setup-node@v4
