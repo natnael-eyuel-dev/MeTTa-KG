@@ -7,6 +7,10 @@ use std::fs;
 use std::process::Command;
 use uuid::Uuid;
 
+fn venv_exists() -> bool {
+    std::path::Path::new("./venv/bin/python").exists()
+}
+
 #[derive(FromFormField, Copy, Clone)]
 pub enum CSVParseDirection {
     Row = 1,
@@ -66,6 +70,10 @@ pub async fn create(
     match result {
         Ok(_) => (),
         Err(err) => println!("{err}"),
+    }
+
+    if !venv_exists() {
+        return Err(Status::ServiceUnavailable);
     }
 
     let status = match parse_parameters {

@@ -5,12 +5,12 @@ import path from "path"
 import tsconfigPaths from 'vite-tsconfig-paths';
 //import tailwindcss from '@tailwindcss/vite'; // Optional: remove if unnecessary
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
 	plugins: [
 		tsconfigPaths(),
 		//tailwindcss(), // ⚠️ Optional — Tailwind works without this
-		devtools(),
 		solid(),
+		...(mode === 'development' ? [devtools()] : []), // only in dev
 	],
 	server: {
 		port: 3000,
@@ -32,7 +32,7 @@ export default defineConfig({
 			"~": path.resolve(__dirname, "./src")
 		}
 	}
-});
+}));
 
 
 //export default defineConfig({

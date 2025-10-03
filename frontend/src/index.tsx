@@ -4,8 +4,6 @@ import { ColorModeProvider, ColorModeScript, createLocalStorageManager } from "@
 import App from "~/pages/index";
 import './app.css'
 
-import 'solid-devtools'
-
 const root = document.getElementById("root");
 
 if (!root) {

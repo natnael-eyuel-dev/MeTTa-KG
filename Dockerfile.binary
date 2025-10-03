@@ -1,0 +1,25 @@
+# Multi-stage Dockerfile for development that builds UI + Rust binary and runs the binary only
+
+# Stage 1: build UI and binary
+FROM rust:1.86 as builder
+WORKDIR /work
+
+# Install Node for UI build
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update && apt-get install -y nodejs musl-tools pkg-config libssl-dev libpq-dev \
+    && rustup target add x86_64-unknown-linux-musl
+
+# Copy sources
+COPY api ./api
+COPY frontend ./frontend
+
+# Build release binary (UI will be built via build.rs)
+WORKDIR /work/api
+ENV OPENSSL_STATIC=1 OPENSSL_DIR=/usr OPENSSL_INCLUDE_DIR=/usr/include OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu LIBPQ_STATIC=1
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# Stage 2: minimal runtime image
+FROM gcr.io/distroless/cc-debian12 as runtime
+WORKDIR /
+COPY --from=builder /work/api/target/x86_64-unknown-linux-musl/release/metta-kg /usr/local/bin/metta-kg
+ENTRYPOINT ["/usr/local/bin/metta-kg"]
