@@ -1,10 +1,9 @@
 # cargo-dist configuration for MeTTa-KG single-binary distribution
 
 [workspace]
-# Installers to build
 installers = ["shell", "powershell", "msi", "pkg", "deb", "appimage"]
 
-# Build targets for macOS, Linux, Windows
+[dist]
 targets = [
   "x86_64-unknown-linux-gnu",
   "x86_64-unknown-linux-musl",
@@ -14,11 +13,10 @@ targets = [
   "x86_64-apple-darwin",
 ]
 
-# Enable updater
+[release]
 updater = true
 
-# Package configuration
-[package]
+[[package]]
 name = "metta-kg"
 features = []
 artifacts = ["bin:metta-kg"]
