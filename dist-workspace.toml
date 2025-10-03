@@ -1,6 +1,7 @@
 # cargo-dist configuration for MeTTa-KG single-binary distribution
 
 [workspace]
+members = ["api"]
 installers = ["shell", "powershell", "msi", "pkg", "deb", "appimage"]
 
 [dist]
