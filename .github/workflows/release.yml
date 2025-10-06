@@ -59,7 +59,7 @@ jobs:
       - name: Clone PathMap
         run: git clone --branch master https://github.com/Adam-Vandervorst/PathMap.git PathMap
       - uses: dtolnay/rust-toolchain@stable
-      - run: cd mork && cargo build --release -p mork-server --bin mork-server
+      - run: cd mork && cargo build --release
       - uses: actions/upload-artifact@v4
         with:
           name: mork-binary
