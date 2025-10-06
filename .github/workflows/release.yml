@@ -59,11 +59,11 @@ jobs:
       - name: Clone PathMap
         run: git clone --branch master https://github.com/Adam-Vandervorst/PathMap.git PathMap
       - uses: dtolnay/rust-toolchain@stable
-      - run: cd mork && cargo build --release -p mork_server --bin mork_server
+      - run: cd mork && cargo build --release -p mork-server --bin mork-server
       - uses: actions/upload-artifact@v4
         with:
           name: mork-binary
-          path: mork/target/release/mork_server
+          path: mork/target/release/mork-server
 
   release:
     needs: [get-version, build-frontend, build-api, build-mork]
@@ -84,7 +84,7 @@ jobs:
       - name: Make binaries executable
         run: |
           chmod +x api-binary/api
-          chmod +x mork-binary/mork_server
+          chmod +x mork-binary/mork-server
       - name: Zip frontend
         run: zip -r frontend.zip frontend-dist/
       - name: Create release
@@ -95,6 +95,6 @@ jobs:
           files: |
             frontend.zip
             api-binary/api
-            mork-binary/mork_server
+            mork-binary/mork-server
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
