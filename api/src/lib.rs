@@ -1,20 +1,18 @@
+pub mod cli;
 pub mod db;
 pub mod model;
 pub mod mork_api;
 pub mod routes;
 pub mod schema;
 
+use crate::cli::Cli;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-
-pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
-use rocket::http::Method;
-use rocket::{routes, Build, Rocket};
+use rocket::{http::Method, routes, Build, Config, Rocket};
 use rocket_cors::AllowedOrigins;
 
-pub fn rocket() -> Rocket<Build> {
-    // TODO: move hardcoded allowed origins to database,
-    // or get backend and frontend hosted under same domain
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
+pub fn rocket(cfg: &Cli) -> Rocket<Build> {
     dotenv::dotenv().ok();
 
     let mut connection = db::establish_connection();
@@ -22,8 +20,11 @@ pub fn rocket() -> Rocket<Build> {
         .run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations");
 
-    let allowed_origins =
-        AllowedOrigins::some_exact(&["http://localhost:3000", "https://metta-kg.vercel.app"]);
+    let allowed_origins = AllowedOrigins::some_exact(&[
+        "http://localhost:3000",
+        "https://metta-kg.vercel.app",
+        "http://127.0.0.1:3000",
+    ]);
 
     let cors = rocket_cors::CorsOptions {
         allowed_origins,
@@ -36,7 +37,20 @@ pub fn rocket() -> Rocket<Build> {
     .to_cors()
     .unwrap();
 
-    rocket::build()
+    let address: std::net::IpAddr = cfg.address.parse().unwrap_or_else(|_| {
+        eprintln!("Invalid --address: must be a numeric IP like 127.0.0.1");
+        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+    });
+
+    let port = cfg.port.unwrap_or(8000);
+
+    let figment = Config::figment()
+        .merge(("address", address))
+        .merge(("port", cfg.port));
+
+    println!("Starting server at http://{}:{}", cfg.address, port);
+
+    rocket::custom(figment)
         .mount(
             "/",
             routes![
@@ -59,7 +73,6 @@ pub fn rocket() -> Rocket<Build> {
                 routes::spaces::clear,
             ],
         )
-        // .mount("/public", FileServer::from("static"))
         .attach(cors.clone())
         .manage(cors)
 }
