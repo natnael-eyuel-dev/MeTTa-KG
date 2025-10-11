@@ -114,7 +114,11 @@ const LoadPage = () => {
               <SpaceGraph
                 pattern={pattern}
                 rootNodes={() => initNodesFromApiResponse(subSpace()!)}
-                ref={setupGraphRefs}
+                ref={(canvasHandle) =>
+                  setupGraphRefs(canvasHandle, (eles: SpaceNode[]) => {
+                    canvasHandle.setElements(eles);
+                  })
+                }
               />
             </Show>
           </Show>
