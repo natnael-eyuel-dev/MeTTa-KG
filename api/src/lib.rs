@@ -7,7 +7,6 @@ pub mod schema;
 
 use crate::cli::Cli;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use rocket::fs::FileServer;
 use rocket::{http::Method, routes, Build, Rocket};
 use rocket_cors::AllowedOrigins;
 use std::io::Write;
@@ -15,9 +14,33 @@ use std::{env, fs};
 use tempfile::Builder;
 use tokio::time::Duration;
 use url::Url;
+use rust_embed::RustEmbed;
+use rocket::{get, http::ContentType};
+use std::path::PathBuf;
+use mime_guess::from_path;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 const MORK_BYTES: &[u8] = include_bytes!(env!("MORK_BINARY_PATH"));
+
+#[derive(RustEmbed)]
+#[folder = "ui-dist/"]
+pub struct UiAssets;
+
+#[get("/")]
+fn index() -> Option<(ContentType, Vec<u8>)> {
+    UiAssets::get("index.html").map(|data| (ContentType::HTML, data.data.into_owned()))
+}
+
+#[get("/<file..>")]
+fn dist(file: PathBuf) -> Option<(ContentType, Vec<u8>)> {
+    let filename = file.to_str()?;
+    UiAssets::get(filename).map(|data| {
+        let mime = from_path(filename).first_or_octet_stream();
+        let ct = ContentType::parse_flexible(mime.as_ref())
+            .unwrap_or(ContentType::Binary);
+        (ct, data.data.into_owned())
+    })
+}
 
 async fn spawn_mork_server(mork_url: &str) {
     let url = url::Url::parse(mork_url).expect("Invalid Mork server URL");
@@ -147,7 +170,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
         )
         .attach(cors.clone())
         .manage(cors)
-        .mount("/", FileServer::from("ui-dist"))
+        .mount("/", routes![index, dist])
 }
 
 pub async fn rocket(cfg: &Cli) -> Rocket<Build> {
