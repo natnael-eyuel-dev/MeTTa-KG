@@ -7,8 +7,10 @@ pub mod schema;
 
 use crate::cli::Cli;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use rocket::{http::Method, routes, Build, Config, Rocket};
+use rocket::fs::FileServer;
+use rocket::{http::Method, routes, Build, Rocket};
 use rocket_cors::AllowedOrigins;
+use url::Url;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -24,6 +26,7 @@ pub fn rocket(cfg: &Cli) -> Rocket<Build> {
         "http://localhost:3000",
         "https://metta-kg.vercel.app",
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
     ]);
 
     let cors = rocket_cors::CorsOptions {
@@ -37,18 +40,26 @@ pub fn rocket(cfg: &Cli) -> Rocket<Build> {
     .to_cors()
     .unwrap();
 
-    let address: std::net::IpAddr = cfg.address.parse().unwrap_or_else(|_| {
-        eprintln!("Invalid --address: must be a numeric IP like 127.0.0.1");
-        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-    });
+    let url = Url::parse(
+        cfg.mettakg_api_url
+            .as_deref()
+            .expect("Missing --mettakg_api_url"),
+    )
+    .expect("Invalid -m mettakg_api_url");
 
-    let port = cfg.port.unwrap_or(8000);
+    let host: std::net::IpAddr = url
+        .host_str()
+        .unwrap_or("127.0.0.1")
+        .parse()
+        .expect("Invalid host IP address");
 
-    let figment = Config::figment()
-        .merge(("address", address))
-        .merge(("port", cfg.port));
+    let port = url.port().unwrap_or(8000);
 
-    println!("Starting server at http://{}:{}", cfg.address, port);
+    println!("MeTTa-KG server starting at {}:{}", host, port);
+
+    let figment = rocket::Config::figment()
+        .merge(("address", host))
+        .merge(("port", port));
 
     rocket::custom(figment)
         .mount(
@@ -75,4 +86,5 @@ pub fn rocket(cfg: &Cli) -> Rocket<Build> {
         )
         .attach(cors.clone())
         .manage(cors)
+        .mount("/", FileServer::from("ui-dist"))
 }
