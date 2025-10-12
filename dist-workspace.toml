@@ -17,6 +17,6 @@ installers = ["shell"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["x86_64-unknown-linux-gnu"]
 # Path that installers should place binaries in
-install-path = "${XDG_BIN_HOME:-$HOME/.local/bin}"
+install-path = "$HOME/.local/bin"
 # Whether to install an updater program
 install-updater = false
