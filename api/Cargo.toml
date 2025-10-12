@@ -39,15 +39,3 @@ serial_test = "3.0"
 
 [features]
 integration-tests = []
-
-[profile.dist]
-inherits = "release"
-lto = "thin"
-
-[[bin]]
-name = "metta-kg-api"
-path = "src/bin/api.rs"
-
-[[bin]]
-name = "metta-kg-frontend"
-path = "src/bin/frontend.rs"
