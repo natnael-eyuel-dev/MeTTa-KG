@@ -20,10 +20,3 @@ targets = ["x86_64-unknown-linux-gnu"]
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
-
-[[dist.extra-artifacts]]
-name = "mork-server"
-kind = "executable"
-path = "api/mork-bin/mork-server"
-build = []
-artifacts = ["mork-server"]
