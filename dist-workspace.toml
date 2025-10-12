@@ -20,4 +20,3 @@ targets = ["x86_64-unknown-linux-gnu"]
 install-path = "${XDG_BIN_HOME:-$HOME/.local/bin}"
 # Whether to install an updater program
 install-updater = false
-profile = "release"
