@@ -7,11 +7,14 @@ pub struct Cli {
     #[arg(long)]
     pub database_url: Option<String>,
 
-    #[arg(long)]
-    pub address: String,
+    #[arg(long, default_value = "http://127.0.0.1:3000")]
+    pub mettakg_frontend_url: Option<String>,
 
-    #[arg(long)]
-    pub port: Option<u16>,
+    #[arg(long, default_value = "http://127.0.0.1:8001")]
+    pub mork_server_url: Option<String>,
+
+    #[arg(long, default_value = "http://127.0.0.1:8000")]
+    pub mettakg_api_url: Option<String>,
 }
 
 impl Cli {
