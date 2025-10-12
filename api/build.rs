@@ -6,21 +6,21 @@ use std::process::Command;
 fn main() {
     let frontend_dir = PathBuf::from("../frontend");
     if frontend_dir.exists() {
-        let npm = if cfg!(target_os = "windows") {
-            "npm.cmd"
+        let pnpm = if cfg!(target_os = "windows") {
+            "pnpm.cmd"
         } else {
-            "npm"
+            "pnpm"
         };
-        let install_status = Command::new(npm)
+        let install_status = Command::new(pnpm)
             .args(["install"])
             .current_dir(&frontend_dir)
             .status()
-            .expect("failed to run npm install");
+            .expect("failed to run pnpm install");
         if !install_status.success() {
-            panic!("npm install failed");
+            panic!("pnpm install failed");
         }
 
-        let status = Command::new(npm)
+        let status = Command::new(pnpm)
             .args(["run", "build"])
             .current_dir(&frontend_dir)
             .status()
@@ -36,6 +36,22 @@ fn main() {
 
         let dist_dir = frontend_dir.join("dist");
         copy_dir_all(&dist_dir, &ui_dist).expect("failed to copy frontend dist to ui-dist");
+    }
+
+    let mork_binary_path =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("mork-bin/mork-server");
+
+    if mork_binary_path.exists() {
+        println!("cargo:rerun-if-changed={}", mork_binary_path.display());
+        println!(
+            "cargo:rustc-env=MORK_BINARY_PATH={}",
+            mork_binary_path.display()
+        );
+    } else {
+        panic!(
+            "Mork binary not found at '{}'. Make sure it exists in the mork-bin directory.",
+            mork_binary_path.display()
+        );
     }
 }
 
