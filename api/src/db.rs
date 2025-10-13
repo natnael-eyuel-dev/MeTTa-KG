@@ -5,12 +5,10 @@ use std::env;
 
 static DATABASE_URL: OnceCell<String> = OnceCell::new();
 
-pub fn init_database_url(cli_url: Option<String>) {
-    if let Some(url) = cli_url {
-        DATABASE_URL
-            .set(url)
-            .expect("DATABASE_URL already initialized");
-    }
+pub fn init_database_url(url: String) {
+    DATABASE_URL
+        .set(url)
+        .expect("DATABASE_URL already initialized");
 }
 
 pub fn establish_connection() -> PgConnection {
@@ -19,9 +17,10 @@ pub fn establish_connection() -> PgConnection {
         let password = env::var("POSTGRES_PASSWORD").expect("POSTGRES_PASSWORD must be set");
         let db_name = env::var("POSTGRES_DB").expect("POSTGRES_DB must be set");
         let host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".to_string());
+        let port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
         format!(
-            "postgresql://{}:{}@{}:5432/{}",
-            user, password, host, db_name
+            "postgresql://{}:{}@{}:{}/{}",
+            user, password, host, port, db_name
         )
     });
 
