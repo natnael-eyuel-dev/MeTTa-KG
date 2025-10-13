@@ -1,9 +1,9 @@
 use diesel::pg::PgConnection;
 use diesel::Connection;
-use once_cell::sync::OnceCell;
 use std::env;
+use std::sync::OnceLock;
 
-static DATABASE_URL: OnceCell<String> = OnceCell::new();
+static DATABASE_URL: OnceLock<String> = OnceLock::new();
 
 pub fn init_database_url(url: String) {
     DATABASE_URL
