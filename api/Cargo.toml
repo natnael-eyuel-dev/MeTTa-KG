@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 build = "build.rs"
 description = "MeTTa Knowledge Graph implementation"
-repository = "https://github.com/Qoba-ai/MeTTa-KG"
+repository = "https://github.com/natnael-eyuel-dev/MeTTa-KG"
 
 [package.metadata.dist]
 preferred-package = true
