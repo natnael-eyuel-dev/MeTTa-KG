@@ -1,7 +1,4 @@
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
+use std::{env, fs, path::PathBuf, process::Command};
 
 fn main() {
     let frontend_dir = PathBuf::from("../frontend");
@@ -46,21 +43,37 @@ fn main() {
         copy_dir_all(&dist_dir, &ui_dist).expect("failed to copy frontend dist to ui-dist");
     }
 
-    let mork_binary_path =
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("mork-bin/mork-server");
+    let mork_bin_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("mork-bin");
+    let mork_binary_path = mork_bin_dir.join("mork-server");
 
-    if mork_binary_path.exists() {
-        println!("cargo:rerun-if-changed={}", mork_binary_path.display());
-        println!(
-            "cargo:rustc-env=MORK_BINARY_PATH={}",
-            mork_binary_path.display()
-        );
-    } else {
-        panic!(
-            "Mork binary not found at '{}'. Make sure it exists in the mork-bin directory.",
-            mork_binary_path.display()
-        );
+    let url = "https://github.com/natnael-eyuel-dev/MeTTa-KG/releases/download/stable/mork_server-x86_64-unknown-linux-gnu";
+    println!("Mork binary missing - downloading from {url}");
+
+    fs::create_dir_all(&mork_bin_dir).expect("failed to create mork-bin directory");
+
+    let status = Command::new("curl")
+        .args(["-L", "-o"])
+        .arg(&mork_binary_path)
+        .arg(url)
+        .status()
+        .expect("failed to run curl");
+
+    if !status.success() {
+        panic!("Failed to download Mork binary from {url}");
     }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&mork_binary_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&mork_binary_path, perms).unwrap();
+    }
+
+    println!(
+        "cargo:rustc-env=MORK_BINARY_PATH={}",
+        mork_binary_path.display()
+    );
 }
 
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
