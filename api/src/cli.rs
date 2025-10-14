@@ -1,10 +1,9 @@
 use clap::Parser;
-use std::env;
 
 #[derive(Parser, Debug)]
 #[command(name = "metta-kg", version, about = "MeTTa-KG Server/Frontend")]
 pub struct Cli {
-    #[arg(long, default_value = "postgres://localhost:5432/metta_kg")]
+    #[arg(long)]
     pub database_url: String,
 
     #[arg(long, default_value = "http://127.0.0.1:3000")]

@@ -1,7 +1,8 @@
-use api::rocket;
-use api::routes::spaces::Mm2Input;
+use clap::Parser;
 use httpmock::prelude::*;
 use httpmock::Regex;
+use metta_kg::rocket;
+use metta_kg::routes::spaces::Mm2Input;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;
@@ -27,7 +28,9 @@ async fn test_export_success() {
         then.status(200).body("(export data)");
     });
 
-    let client = Client::tracked(rocket())
+    let cli = metta_kg::cli::Cli::parse();
+    // Create client
+    let client = Client::tracked(rocket(&cli).await)
         .await
         .expect("valid rocket instance");
 
@@ -62,7 +65,9 @@ async fn test_non_existent_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let client = Client::tracked(rocket())
+    let cli = metta_kg::cli::Cli::parse();
+    // Create client
+    let client = Client::tracked(rocket(&cli).await)
         .await
         .expect("valid rocket instance");
 
@@ -103,7 +108,9 @@ async fn test_existing_empty_namespace() {
         then.status(200).body("(export data)");
     });
 
-    let client = Client::tracked(rocket())
+    let cli = metta_kg::cli::Cli::parse();
+    // Create client
+    let client = Client::tracked(rocket(&cli).await)
         .await
         .expect("valid rocket instance");
 
@@ -145,7 +152,9 @@ async fn test_non_empty_namespace() {
         then.status(200).body("(export data)");
     });
 
-    let client = Client::tracked(rocket())
+    let cli = metta_kg::cli::Cli::parse();
+    // Create client
+    let client = Client::tracked(rocket(&cli).await)
         .await
         .expect("valid rocket instance");
 
@@ -187,7 +196,9 @@ async fn test_different_namespaces() {
         then.status(200).body("(export data)");
     });
 
-    let client = Client::tracked(rocket())
+    let cli = metta_kg::cli::Cli::parse();
+    // Create client
+    let client = Client::tracked(rocket(&cli).await)
         .await
         .expect("valid rocket instance");
 
@@ -229,7 +240,9 @@ async fn test_namespace_mismatch() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let client = Client::tracked(rocket())
+    let cli = metta_kg::cli::Cli::parse();
+    // Create client
+    let client = Client::tracked(rocket(&cli).await)
         .await
         .expect("valid rocket instance");
 

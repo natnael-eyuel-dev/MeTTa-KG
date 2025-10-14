@@ -1,10 +1,10 @@
-use api::model::{Token, TokenInsert};
-use api::schema::tokens;
-use api::{db::establish_connection, MIGRATIONS};
 use chrono::Utc;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel_migrations::MigrationHarness;
+use metta_kg::model::{Token, TokenInsert};
+use metta_kg::schema::tokens;
+use metta_kg::{db::establish_connection, MIGRATIONS};
 use std::env;
 
 pub fn create_test_database_if_not_exists() {

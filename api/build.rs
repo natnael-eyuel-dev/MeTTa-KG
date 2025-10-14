@@ -6,12 +6,20 @@ use std::process::Command;
 fn main() {
     let frontend_dir = PathBuf::from("../frontend");
     if frontend_dir.exists() {
-        let npm = if cfg!(target_os = "windows") {
-            "npm.cmd"
-        } else {
-            "npm"
-        };
-        let install_status = Command::new(npm)
+        let npm = "npm";
+        let pnpm = "pnpm";
+
+        if Command::new(pnpm).args(["--version"]).status().is_err() {
+            let install_pnpm_status = Command::new(npm)
+                .args(["install", "-g", "pnpm"])
+                .status()
+                .expect("failed to run npm install -g pnpm");
+            if !install_pnpm_status.success() {
+                panic!("npm install -g pnpm failed");
+            }
+        }
+
+        let install_status = Command::new(pnpm)
             .args(["install"])
             .current_dir(&frontend_dir)
             .status()
