@@ -1,0 +1,80 @@
+name: Build and Upload MORK Server Binaries
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  build-mork:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    env:
+      PATHMAP_DIR: ${{ github.workspace }}/PathMap
+
+    steps:
+      - name: Checkout MORK
+        uses: actions/checkout@v4
+        with:
+          repository: trueagi-io/MORK
+          ref: ${{ secrets.MORK_COMMIT_HASH }}
+          path: MORK
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          override: true
+          profile: minimal
+          components: rustfmt, clippy
+
+      - name: Checkout PathMap
+        uses: actions/checkout@v4
+        with:
+          repository: Adam-Vandervorst/PathMap
+          ref: stable
+          path: PathMap
+
+      - name: Build mork-server
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Building MORK for target: ${{ matrix.target }}"
+          cd MORK
+          cargo update -w
+          cargo build --locked --release --target "${{ matrix.target }}" -p mork_server --bin mork_server
+          echo "MORK build completed"
+
+      - name: Stage MORK artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p mork-dist
+          if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
+            cp "MORK/target/${{ matrix.target }}/release/mork_server.exe" "mork-dist/mork_server-${{ matrix.target }}.exe"
+            test -f "MORK/target/${{ matrix.target }}/release/mork_server_update.exe" && \
+              cp "MORK/target/${{ matrix.target }}/release/mork_server_update.exe" "mork-dist/mork_server_update-${{ matrix.target }}.exe" || true
+          else
+            cp "MORK/target/${{ matrix.target }}/release/mork_server" "mork-dist/mork_server-${{ matrix.target }}"
+            test -f "MORK/target/${{ matrix.target }}/release/mork_server_update" && \
+              cp "MORK/target/${{ matrix.target }}/release/mork_server_update" "mork-dist/mork_server_update-${{ matrix.target }}" || true
+          fi
+          echo "Artifacts staged:"
+          ls -la mork-dist/
+
+      - name: Create or update GitHub Release (stable)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: stable
+          name: Stable MORK Server Binaries
+          files: mork-dist/*
+          prerelease: false
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
