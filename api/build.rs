@@ -46,7 +46,7 @@ fn main() {
     let mork_bin_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("mork-bin");
     let mork_binary_path = mork_bin_dir.join("mork-server");
 
-    let url = "https://github.com/natnael-eyuel-dev/MeTTa-KG/releases/download/stable/mork_server-x86_64-unknown-linux-gnu";
+    let url = "https://github.com/Qoba-ai/MeTTa-KG/releases/download/stable/mork_server-x86_64-unknown-linux-gnu";
     println!("Mork binary missing - downloading from {url}");
 
     fs::create_dir_all(&mork_bin_dir).expect("failed to create mork-bin directory");
