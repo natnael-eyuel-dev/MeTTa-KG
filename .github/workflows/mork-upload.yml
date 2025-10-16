@@ -25,11 +25,14 @@ jobs:
       PATHMAP_DIR: ${{ github.workspace }}/PathMap
 
     steps:
+      - name: Load MORK commit hash
+        run: echo "MORK_COMMIT_HASH=$(cat mork-commit-hash)" >> $GITHUB_ENV
+
       - name: Checkout MORK
         uses: actions/checkout@v4
         with:
           repository: trueagi-io/MORK
-          ref: ${{ secrets.MORK_COMMIT_HASH }}
+          ref: ${{ env.MORK_COMMIT_HASH }}
           path: MORK
 
       - name: Install Rust toolchain
@@ -54,7 +57,7 @@ jobs:
           echo "Building MORK for target: ${{ matrix.target }}"
           cd MORK
           cargo update -w
-          cargo build --locked --release --target "${{ matrix.target }}" -p mork_server --bin mork_server
+          cargo build --locked --release --target "${{ matrix.target }}" -p mork-server --bin mork-server
           echo "MORK build completed"
 
       - name: Stage MORK artifacts
@@ -63,13 +66,13 @@ jobs:
           set -euo pipefail
           mkdir -p mork-dist
           if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
-            cp "MORK/target/${{ matrix.target }}/release/mork_server.exe" "mork-dist/mork_server-${{ matrix.target }}.exe"
-            test -f "MORK/target/${{ matrix.target }}/release/mork_server_update.exe" && \
-              cp "MORK/target/${{ matrix.target }}/release/mork_server_update.exe" "mork-dist/mork_server_update-${{ matrix.target }}.exe" || true
+            cp "MORK/target/${{ matrix.target }}/release/mork-server.exe" "mork-dist/mork-server-${{ matrix.target }}.exe"
+            test -f "MORK/target/${{ matrix.target }}/release/mork-server-update.exe" && \
+              cp "MORK/target/${{ matrix.target }}/release/mork-server-update.exe" "mork-dist/mork-server-update-${{ matrix.target }}.exe" || true
           else
-            cp "MORK/target/${{ matrix.target }}/release/mork_server" "mork-dist/mork_server-${{ matrix.target }}"
-            test -f "MORK/target/${{ matrix.target }}/release/mork_server_update" && \
-              cp "MORK/target/${{ matrix.target }}/release/mork_server_update" "mork-dist/mork_server_update-${{ matrix.target }}" || true
+            cp "MORK/target/${{ matrix.target }}/release/mork-server" "mork-dist/mork-server-${{ matrix.target }}"
+            test -f "MORK/target/${{ matrix.target }}/release/mork-server-update" && \
+              cp "MORK/target/${{ matrix.target }}/release/mork-server-update" "mork-dist/mork-server-update-${{ matrix.target }}" || true
           fi
           echo "Artifacts staged:"
           ls -la mork-dist/
