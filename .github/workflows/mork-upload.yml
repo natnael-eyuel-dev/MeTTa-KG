@@ -57,7 +57,7 @@ jobs:
           echo "Building MORK for target: ${{ matrix.target }}"
           cd MORK
           cargo update -w
-          cargo build --locked --release --target "${{ matrix.target }}" -p server --bin mork-server
+          cargo build --locked --release --target "${{ matrix.target }}" -p mork-server --bin mork-server
           echo "MORK build completed"
 
       - name: Stage MORK artifacts
