@@ -9,7 +9,7 @@ name: Build and Upload MORK Server Binaries
 on:
   push:
     branches:
-      - 'main'
+      - 'deploy/binary-release-sequential-test'
   workflow_dispatch:
 
 jobs:
