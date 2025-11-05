@@ -25,7 +25,7 @@ fn main() {
             panic!("npm install failed");
         }
 
-        let status = Command::new(npm)
+        let status = Command::new(pnpm)
             .args(["run", "build"])
             .current_dir(&frontend_dir)
             .status()
