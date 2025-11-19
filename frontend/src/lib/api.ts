@@ -4,7 +4,7 @@ import { CSVParserParameters } from "~/types";
 import { quoteFromBytes } from "./utils";
 
 export const API_URL =
-  import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+  window.location.origin || import.meta.env.VITE_BACKEND_URL;
 
 export interface ApiResponse {
   status: "success" | "error";
