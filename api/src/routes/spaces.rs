@@ -331,6 +331,41 @@ pub async fn composition(
     }
 }
 
+/// Performs a restriction operation on provided namespaces. `token` must have `permission_write`
+/// on the target namespace and `permission_read` on both source namespaces.
+/// Restriction keeps path facts whose prefix exists in the prefix namespace.
+/// Expected form (conceptual):
+/// (transform
+///     (, (paths $a $b $v) (prefixes $a $b))
+///     (, (target $a $b $v))
+/// )
+#[post("/spaces/restriction", data = "<mm2>")]
+pub async fn restriction(
+    token: Token,
+    mm2: Json<Mm2InputMultiWithNamespace>,
+) -> Result<Json<bool>, Status> {
+    let mm2 = mm2.into_inner();
+    if !mm2.clone().source_target_permissions(token) {
+        return Err(Status::Unauthorized);
+    }
+
+    // Enforce 2 patterns and 1 template for restriction
+    if mm2.patterns.len() != 2 || mm2.templates.len() != 1 {
+        return Err(Status::BadRequest);
+    }
+
+    let mork_api_client = MorkApiClient::new();
+    let transform_details = TransformDetails::new()
+        .patterns(mm2.patterns.clone())
+        .templates(mm2.templates.clone());
+    let request = TransformRequest::new().transform_input(transform_details);
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
