@@ -34,12 +34,21 @@ fn index() -> Option<(ContentType, Vec<u8>)> {
 #[get("/<file..>")]
 fn dist(file: PathBuf) -> Option<(ContentType, Vec<u8>)> {
     let filename = file.to_str()?;
-    UiAssets::get(filename).map(|data| {
+    
+    if let Some(data) = UiAssets::get(filename) {
         let mime = from_path(filename).first_or_octet_stream();
-        let ct = ContentType::parse_flexible(mime.as_ref()).unwrap_or(ContentType::Binary);
-        (ct, data.data.into_owned())
-    })
+        let mime_str = mime.to_string();
+        let content_type = ContentType::parse_flexible(&mime_str).unwrap_or(ContentType::Binary);  // Convert Mime to ContentType
+        return Some((content_type, data.data.into_owned()));
+    }
+    
+    if !filename.starts_with("api") && !filename.starts_with("assets") {
+        UiAssets::get("index.html").map(|data| (ContentType::HTML, data.data.into_owned()))
+    } else {
+        None 
+    }
 }
+
 
 async fn spawn_mork_server(mork_url: &str) {
     let url = url::Url::parse(mork_url).expect("Invalid Mork server URL");
@@ -105,12 +114,25 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
         .run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations");
 
-    let allowed_origins = AllowedOrigins::some_exact(&[
-        "http://localhost:3000",
-        "https://metta-kg.vercel.app",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-    ]);
+    let api_url = Url::parse(
+        cfg.mettakg_api_url
+            .as_deref()
+            .expect("Missing --mettakg_api_url"),
+    )
+    .expect("Invalid --mettakg_api_url");
+    let dynamic_origin = format!("{}://{}:{}", api_url.scheme(), api_url.host_str().unwrap_or("127.0.0.1"), api_url.port().unwrap_or(8000));
+
+    let mut origins = vec![
+        "http://localhost:3000".to_string(),
+        "https://metta-kg.vercel.app".to_string(),
+        "http://127.0.0.1:3000".to_string(),
+        "http://127.0.0.1:8000".to_string(),
+    ];
+    if !origins.contains(&dynamic_origin) {
+        origins.push(dynamic_origin);
+    }
+
+    let allowed_origins = AllowedOrigins::some_exact(&origins.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
     let cors = rocket_cors::CorsOptions {
         allowed_origins,
