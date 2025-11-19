@@ -4,6 +4,7 @@ import LoadPage from "../load/Load";
 import UploadPage from "../upload/Upload";
 import TransformPage from "../transform/Transform";
 import CompositionPage from "../composition/Composition";
+import RestrictionPage from "../restriction/Restriction";
 import ExportPage from "../export/Export";
 import TokensPage from "../tokens/Tokens";
 import ClearPage from "../clear/Clear";
@@ -73,10 +74,11 @@ const sidebarSections = [
         to: "/difference",
       },
       {
-        id: "restrict",
-        label: "Restrict",
+        id: "restriction",
+        label: "Restriction",
         icon: () => <span class="text-xl font-bold">◁</span>,
-        to: "/restrict",
+        to: "/restriction",
+        component: RestrictionPage,
       },
       {
         id: "decapitate",
