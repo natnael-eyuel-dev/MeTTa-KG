@@ -127,6 +127,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
         "https://metta-kg.vercel.app".to_string(),
         "http://127.0.0.1:3000".to_string(),
         "http://127.0.0.1:8000".to_string(),
+        "http://127.0.0.1:8080".to_string(), // For config server
     ];
     if !origins.contains(&dynamic_origin) {
         origins.push(dynamic_origin);
