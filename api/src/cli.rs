@@ -4,14 +4,14 @@ use clap::Parser;
 #[command(name = "metta-kg", version, about = "MeTTa-KG Server/Frontend")]
 pub struct Cli {
     #[arg(long)]
-    pub database_url: String,
+    pub database_url: Option<String>,
 
-    #[arg(long, default_value = "http://127.0.0.1:3000")]
+    #[arg(long)]
     pub mettakg_frontend_url: Option<String>,
 
-    #[arg(long, default_value = "http://127.0.0.1:8001")]
+    #[arg(long)]
     pub mork_server_url: Option<String>,
 
-    #[arg(long, default_value = "http://127.0.0.1:8000")]
+    #[arg(long)]
     pub mettakg_api_url: Option<String>,
 }
