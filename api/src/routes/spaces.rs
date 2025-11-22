@@ -331,6 +331,52 @@ pub async fn composition(
     }
 }
 
+/// Performs a tails union (drop-head) operation.
+/// Given a source namespace containing facts of the form `(head tail)` this emits
+/// the tail expression into the target namespace. Requires read on source and write on target.
+///
+/// Transformation shape:
+/// ```lisp
+/// (transform
+///   (, (sourceNS ($h $t)))
+///   (, (targetNS ($t)))
+/// )
+/// ```
+#[post("/spaces/tails_union", data = "<operation_input>")]
+pub async fn tails_union(
+    token: Token,
+    operation_input: Json<SetOperationInput>,
+) -> Result<Json<bool>, Status> {
+    let input = operation_input.into_inner();
+
+    if !input.clone().source_target_permissions(token) {
+        return Err(Status::Unauthorized);
+    }
+
+    if input.source.len() != 1 || input.target.len() != 1 {
+        return Err(Status::BadRequest);
+    }
+
+    let pattern_ns = PathBuf::from(input.source[0].clone());
+    let template_ns = PathBuf::from(input.target[0].clone());
+
+    let patterns = vec![Pattern::default()
+        .namespace(pattern_ns)
+        .pattern("($h $t)".to_string())];
+    let templates = vec![Template::default()
+        .namespace(template_ns)
+        .template("($t)".to_string())];
+
+    let transform_details = TransformDetails::new().patterns(patterns).templates(templates);
+    let request = TransformRequest::new().transform_input(transform_details);
+    let mork_api_client = MorkApiClient::new();
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////// HELPER FUNCTIONS ////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
