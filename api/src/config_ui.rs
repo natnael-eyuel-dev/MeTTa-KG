@@ -1,10 +1,10 @@
 use crate::cli::Cli;
-use rocket::{get, post, routes, FromForm, State};
 use rocket::form::Form;
 use rocket::response::content::RawHtml;
 use rocket::response::Redirect;
-use tokio::sync::mpsc;
+use rocket::{get, post, routes, FromForm, State};
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 
 #[derive(Clone, FromForm)]
@@ -28,18 +28,47 @@ struct RedirectUrl(Arc<Mutex<Option<String>>>);
 #[get("/")]
 fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
     let db_value = data.database_url.as_deref().unwrap_or("");
-    let db_readonly = if data.database_url.is_some() { "readonly" } else { "" };
-    
-    let api_value = data.mettakg_api_url.as_deref().unwrap_or("");
-    let api_readonly = if data.mettakg_api_url.is_some() { "readonly" } else { "" };
-    
-    let mork_value = data.mork_server_url.as_deref().unwrap_or("");
-    let mork_readonly = if data.mork_server_url.is_some() { "readonly" } else { "" };
-    
-    let frontend_value = data.mettakg_frontend_url.as_deref().unwrap_or("");
-    let frontend_readonly = if data.mettakg_frontend_url.is_some() { "readonly" } else { "" };
+    let db_readonly = if data.database_url.is_some() {
+        "readonly"
+    } else {
+        ""
+    };
 
-    let html = format!(r#"
+    let api_value = data.mettakg_api_url.as_deref().unwrap_or("");
+    let api_readonly = if data.mettakg_api_url.is_some() {
+        "readonly"
+    } else {
+        ""
+    };
+
+    let mork_value = data.mork_server_url.as_deref().unwrap_or("");
+    let mork_readonly = if data.mork_server_url.is_some() {
+        "readonly"
+    } else {
+        ""
+    };
+
+    let frontend_value = data.mettakg_frontend_url.as_deref().unwrap_or("");
+    let frontend_readonly = if data.mettakg_frontend_url.is_some() {
+        "readonly"
+    } else {
+        ""
+    };
+
+    #[cfg(feature = "sqlite")]
+    let (db_placeholder, db_hint) = (
+        "metta_kg.db or /path/to/database.db",
+        "SQLite database file path (e.g., metta_kg.db)",
+    );
+
+    #[cfg(feature = "postgres")]
+    let (db_placeholder, db_hint) = (
+        "postgres://user:password@localhost/dbname",
+        "PostgreSQL connection string (e.g., postgres://mettakg_user:abc123@localhost/mettakg_db)",
+    );
+
+    let html = format!(
+        r#"
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -248,12 +277,12 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
                         <input 
                             type="text" 
                             name="database_url" 
-                            placeholder="postgres://user:password@localhost/dbname" 
+                            placeholder="{}" 
                             value="{}" 
                             {} 
                             required
                         >
-                        <div class="hint">PostgreSQL connection string (e.g., postgres://mettakg_user:abc123@localhost/mettakg_db)</div>
+                        <div class="hint">{}</div>
                         {}
                     </div>
                     
@@ -312,14 +341,36 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
     </body>
     </html>
     "#,
-        db_value, db_readonly, 
-        if data.database_url.is_some() { r#"<div class="preset">Set via CLI argument</div>"# } else { "" },
-        api_value, api_readonly,
-        if data.mettakg_api_url.is_some() { r#"<div class="preset">Set via CLI argument</div>"# } else { "" },
-        mork_value, mork_readonly,
-        if data.mork_server_url.is_some() { r#"<div class="preset">Set via CLI argument</div>"# } else { "" },
-        frontend_value, frontend_readonly,
-        if data.mettakg_frontend_url.is_some() { r#"<div class="preset">Set via CLI argument</div>"# } else { "" }
+        db_placeholder,
+        db_value,
+        db_readonly,
+        db_hint,
+        if data.database_url.is_some() {
+            r#"<div class="preset">Set via CLI argument</div>"#
+        } else {
+            ""
+        },
+        api_value,
+        api_readonly,
+        if data.mettakg_api_url.is_some() {
+            r#"<div class="preset">Set via CLI argument</div>"#
+        } else {
+            ""
+        },
+        mork_value,
+        mork_readonly,
+        if data.mork_server_url.is_some() {
+            r#"<div class="preset">Set via CLI argument</div>"#
+        } else {
+            ""
+        },
+        frontend_value,
+        frontend_readonly,
+        if data.mettakg_frontend_url.is_some() {
+            r#"<div class="preset">Set via CLI argument</div>"#
+        } else {
+            ""
+        }
     );
 
     RawHtml(html)
@@ -327,36 +378,44 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
 
 #[post("/submit", data = "<form>")]
 async fn submit_config(
-    form: Form<ConfigForm>, 
+    form: Form<ConfigForm>,
     tx: &State<mpsc::Sender<ConfigForm>>,
-    redirect_url: &State<RedirectUrl>
+    redirect_url: &State<RedirectUrl>,
 ) -> Redirect {
     let trimmed_form = ConfigForm {
         database_url: form.database_url.trim().to_string(),
-        mettakg_frontend_url: form.mettakg_frontend_url.as_ref().map(|s| s.trim().to_string()),
+        mettakg_frontend_url: form
+            .mettakg_frontend_url
+            .as_ref()
+            .map(|s| s.trim().to_string()),
         mork_server_url: form.mork_server_url.as_ref().map(|s| s.trim().to_string()),
         mettakg_api_url: form.mettakg_api_url.as_ref().map(|s| s.trim().to_string()),
     };
-    
-    let api_url = trimmed_form.mettakg_api_url.clone()
+
+    let api_url = trimmed_form
+        .mettakg_api_url
+        .clone()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
-    
+
     *redirect_url.0.lock().await = Some(api_url.clone());
-    
+
     let _ = tx.send(trimmed_form).await;
-    
+
     Redirect::to("/waiting")
 }
 
 #[get("/waiting")]
 fn waiting_page(redirect_url: &State<RedirectUrl>) -> RawHtml<String> {
-    let url = redirect_url.0.try_lock()
+    let url = redirect_url
+        .0
+        .try_lock()
         .ok()
         .and_then(|guard| guard.clone())
         .unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
-    
-    let html = format!(r#"
+
+    let html = format!(
+        r#"
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -458,8 +517,10 @@ fn waiting_page(redirect_url: &State<RedirectUrl>) -> RawHtml<String> {
         </div>
     </body>
     </html>
-    "#, url, url, url);
-    
+    "#,
+        url, url, url
+    );
+
     RawHtml(html)
 }
 
@@ -483,7 +544,7 @@ pub async fn launch_config_server(preset_config: ConfigPageData) -> Cli {
     });
 
     let config_form: ConfigForm = rx.recv().await.expect("Failed to receive config");
-    
+
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     handle.abort();
 
