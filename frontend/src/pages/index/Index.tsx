@@ -3,6 +3,7 @@ import { createSignal, For } from "solid-js";
 import LoadPage from "../load/Load";
 import UploadPage from "../upload/Upload";
 import TransformPage from "../transform/Transform";
+import TailsUnionPage from "../tails_union/TailsUnion";
 import CompositionPage from "../composition/Composition";
 import ExportPage from "../export/Export";
 import TokensPage from "../tokens/Tokens";
@@ -83,6 +84,7 @@ const sidebarSections = [
         label: "Decapitate",
         icon: () => <span class="text-xl">T</span>,
         to: "/decapitate",
+        component: TailsUnionPage,
       },
       {
         id: "head",
