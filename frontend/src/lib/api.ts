@@ -4,7 +4,7 @@ import { CSVParserParameters } from "~/types";
 import { quoteFromBytes } from "./utils";
 
 export const API_URL =
-  window.location.origin || import.meta.env.VITE_BACKEND_URL;
+  (window.location.origin || import.meta.env.VITE_BACKEND_URL) + "/api";
 
 export interface ApiResponse {
   status: "success" | "error";
@@ -40,7 +40,11 @@ export async function request<T>(
     Authorization: authOverride || auth,
   };
 
-  const finalUrl = new URL(url, API_URL);
+  // FIX: Ensure we don't strip the /api path.
+  // If 'url' starts with '/', remove it to append cleanly to API_URL
+  const cleanPath = url.startsWith("/") ? url.slice(1) : url;
+  const finalUrl = `${API_URL}/${cleanPath}`;
+
   const response = await fetch(finalUrl, { ...options, headers });
 
   if (!response.ok) {
