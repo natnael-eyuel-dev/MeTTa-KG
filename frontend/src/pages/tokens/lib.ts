@@ -142,13 +142,11 @@ export const handleDelete = async () => {
       await deleteTokens(root, idsToDelete);
     }
 
-    mutateTokens(
-      (current) => current?.filter((t) => !idsToDelete.includes(t.id)) || []
-    );
+    await refetchTokens();
 
     showToast({
       title: "Success",
-      description: `Deleted ${idsToDelete.length} token(s).`,
+      description: `Deleted ${idsToDelete.length} token(s) and their children.`,
     });
     setSelectedTokens([]);
   } catch {

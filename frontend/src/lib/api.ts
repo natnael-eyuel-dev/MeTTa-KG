@@ -4,7 +4,7 @@ import { CSVParserParameters } from "~/types";
 import { quoteFromBytes } from "./utils";
 
 export const API_URL =
-  import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+  (window.location.origin || import.meta.env.VITE_BACKEND_URL) + "/api";
 
 export interface ApiResponse {
   status: "success" | "error";
@@ -26,7 +26,8 @@ export enum CSVParseDirection {
 
 export async function request<T>(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  authOverride?: string | null
 ): Promise<T> {
   const auth = rootToken();
 
@@ -36,10 +37,14 @@ export async function request<T>(
 
   const headers = {
     ...options.headers,
-    Authorization: auth,
+    Authorization: authOverride || auth,
   };
 
-  const finalUrl = new URL(url, API_URL);
+  // FIX: Ensure we don't strip the /api path.
+  // If 'url' starts with '/', remove it to append cleanly to API_URL
+  const cleanPath = url.startsWith("/") ? url.slice(1) : url;
+  const finalUrl = `${API_URL}/${cleanPath}`;
+
   const response = await fetch(finalUrl, { ...options, headers });
 
   if (!response.ok) {
@@ -269,14 +274,18 @@ export const createToken = async (
     parent: 0,
   };
 
-  return request<Token>("/tokens", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: root,
+  return request<Token>(
+    "/tokens",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: root,
+      },
+      body: JSON.stringify(newToken),
     },
-    body: JSON.stringify(newToken),
-  });
+    root
+  );
 };
 
 export const refreshCodes = async (

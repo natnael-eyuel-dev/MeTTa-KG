@@ -19,8 +19,19 @@ use tempfile::Builder;
 use tokio::time::Duration;
 use url::Url;
 
-pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
-const MORK_BYTES: &[u8] = include_bytes!(env!("MORK_BINARY_PATH"));
+#[cfg(feature = "sqlite")]
+use diesel::sqlite::SqliteConnection as DbConnection;
+
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
+use diesel::pg::PgConnection as DbConnection;
+
+#[cfg(feature = "sqlite")]
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
+
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
+
+pub const MORK_BYTES: &[u8] = include_bytes!(env!("MORK_BINARY_PATH"));
 
 #[derive(RustEmbed)]
 #[folder = "ui-dist/"]
@@ -34,11 +45,19 @@ fn index() -> Option<(ContentType, Vec<u8>)> {
 #[get("/<file..>")]
 fn dist(file: PathBuf) -> Option<(ContentType, Vec<u8>)> {
     let filename = file.to_str()?;
-    UiAssets::get(filename).map(|data| {
+
+    if let Some(data) = UiAssets::get(filename) {
         let mime = from_path(filename).first_or_octet_stream();
-        let ct = ContentType::parse_flexible(mime.as_ref()).unwrap_or(ContentType::Binary);
-        (ct, data.data.into_owned())
-    })
+        let mime_str = mime.to_string();
+        let content_type = ContentType::parse_flexible(&mime_str).unwrap_or(ContentType::Binary);
+        return Some((content_type, data.data.into_owned()));
+    }
+
+    if !filename.starts_with("api") && !filename.starts_with("assets") {
+        UiAssets::get("index.html").map(|data| (ContentType::HTML, data.data.into_owned()))
+    } else {
+        None
+    }
 }
 
 async fn spawn_mork_server(mork_url: &str) {
@@ -77,6 +96,7 @@ async fn spawn_mork_server(mork_url: &str) {
     tokio::spawn(async move {
         let mut cmd = tokio::process::Command::new(&temp_path);
         cmd.env("MORK_SERVER_PORT", port);
+        cmd.kill_on_drop(true);
 
         match cmd.spawn() {
             Ok(mut child) => {
@@ -100,17 +120,37 @@ async fn spawn_mork_server(mork_url: &str) {
 fn build_rocket(cfg: &Cli) -> Rocket<Build> {
     dotenv::dotenv().ok();
 
-    let mut connection = db::establish_connection();
+    let mut connection: DbConnection = db::establish_connection();
     connection
         .run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations");
 
-    let allowed_origins = AllowedOrigins::some_exact(&[
-        "http://localhost:3000",
-        "https://metta-kg.vercel.app",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-    ]);
+    let api_url = Url::parse(
+        cfg.mettakg_api_url
+            .as_deref()
+            .expect("Missing --mettakg_api_url"),
+    )
+    .expect("Invalid --mettakg_api_url");
+    let dynamic_origin = format!(
+        "{}://{}:{}",
+        api_url.scheme(),
+        api_url.host_str().unwrap_or("127.0.0.1"),
+        api_url.port().unwrap_or(8000)
+    );
+
+    let mut origins = vec![
+        "http://localhost:3000".to_string(),
+        "https://metta-kg.vercel.app".to_string(),
+        "http://127.0.0.1:3000".to_string(),
+        "http://127.0.0.1:8000".to_string(),
+        "http://127.0.0.1:8080".to_string(), // For config server
+    ];
+    if !origins.contains(&dynamic_origin) {
+        origins.push(dynamic_origin);
+    }
+
+    let allowed_origins =
+        AllowedOrigins::some_exact(&origins.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
     let cors = rocket_cors::CorsOptions {
         allowed_origins,
@@ -146,7 +186,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
 
     rocket::custom(figment)
         .mount(
-            "/",
+            "/api",
             routes![
                 routes::translations::create_from_csv,
                 routes::translations::create_from_nt,

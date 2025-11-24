@@ -12,8 +12,8 @@ preferred-package = true
 [dependencies]
 serde = { version = "1.0.204", features = ["derive"] }
 rocket = { version = "0.5.1", features = ["json"] }
-diesel = { version = "2.2.2", features = ["postgres", "chrono", "sqlite", "returning_clauses_for_sqlite_3_35"] }
-diesel_migrations = "2.3.0"
+diesel = { version = "2.2.2", default-features = false }
+diesel_migrations = { version = "2.2.0", default-features = false }
 dotenv = "0.15.0"
 jwt = "0.16.0"
 hmac = "0.12.1"
@@ -38,6 +38,18 @@ httpmock = "0.7.0"
 serial_test = "3.0"
 
 [features]
+default = ["sqlite"]
+sqlite = [
+    "diesel/sqlite",
+    "diesel/chrono",
+    "diesel/returning_clauses_for_sqlite_3_35",
+    "diesel_migrations/sqlite"
+]
+postgres = [
+    "diesel/postgres",
+    "diesel/chrono",
+    "diesel_migrations/postgres"
+]
 integration-tests = []
 
 [profile.dist]

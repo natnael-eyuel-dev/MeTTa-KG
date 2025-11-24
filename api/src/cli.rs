@@ -4,14 +4,19 @@ use clap::Parser;
 #[command(name = "metta-kg", version, about = "MeTTa-KG Server/Frontend")]
 pub struct Cli {
     #[arg(long)]
-    pub database_url: String,
+    #[cfg_attr(
+        feature = "sqlite",
+        arg(help = "Database file path (e.g., metta_kg.db)")
+    )]
+    #[cfg_attr(
+        feature = "postgres",
+        arg(help = "PostgreSQL connection URL (e.g., postgres://user:pass@localhost/dbname)")
+    )]
+    pub database_url: Option<String>,
 
-    #[arg(long, default_value = "http://127.0.0.1:3000")]
-    pub mettakg_frontend_url: Option<String>,
-
-    #[arg(long, default_value = "http://127.0.0.1:8001")]
+    #[arg(long)]
     pub mork_server_url: Option<String>,
 
-    #[arg(long, default_value = "http://127.0.0.1:8000")]
+    #[arg(long)]
     pub mettakg_api_url: Option<String>,
 }
