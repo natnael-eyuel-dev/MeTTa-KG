@@ -1,7 +1,7 @@
 #[cfg(feature = "sqlite")]
 use diesel::sqlite::SqliteConnection as DbConnection;
 
-#[cfg(feature = "postgres")]
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 use diesel::pg::PgConnection as DbConnection;
 
 use diesel::Connection;
@@ -23,7 +23,7 @@ pub fn establish_connection() -> DbConnection {
             env::var("DATABASE_URL").unwrap_or_else(|_| "metta_kg.db".to_string())
         }
 
-        #[cfg(feature = "postgres")]
+        #[cfg(all(feature = "postgres", not(feature = "sqlite")))]
         {
             let user = env::var("POSTGRES_USER").expect("POSTGRES_USER must be set");
             let password = env::var("POSTGRES_PASSWORD").expect("POSTGRES_PASSWORD must be set");
@@ -37,6 +37,7 @@ pub fn establish_connection() -> DbConnection {
         }
     });
 
+    #[allow(unused_mut)]
     let mut conn = DbConnection::establish(&url)
         .unwrap_or_else(|e| panic!("Error connecting to {}: {}", url, e));
 
