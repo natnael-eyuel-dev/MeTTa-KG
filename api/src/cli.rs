@@ -15,9 +15,6 @@ pub struct Cli {
     pub database_url: Option<String>,
 
     #[arg(long)]
-    pub mettakg_frontend_url: Option<String>,
-
-    #[arg(long)]
     pub mork_server_url: Option<String>,
 
     #[arg(long)]
