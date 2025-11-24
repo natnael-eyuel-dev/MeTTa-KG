@@ -1,16 +1,24 @@
 use crate::cli::Cli;
+use diesel::Connection;
 use rocket::form::Form;
 use rocket::response::content::RawHtml;
 use rocket::response::Redirect;
 use rocket::{get, post, routes, FromForm, State};
+use std::net::TcpListener;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use url::Url;
+
+#[cfg(feature = "sqlite")]
+use diesel::sqlite::SqliteConnection as DbConnection;
+
+#[cfg(feature = "postgres")]
+use diesel::pg::PgConnection as DbConnection;
 
 #[derive(Clone, FromForm)]
 struct ConfigForm {
     database_url: String,
-    mettakg_frontend_url: Option<String>,
     mork_server_url: Option<String>,
     mettakg_api_url: Option<String>,
 }
@@ -20,40 +28,22 @@ pub struct ConfigPageData {
     pub database_url: Option<String>,
     pub mettakg_api_url: Option<String>,
     pub mork_server_url: Option<String>,
-    pub mettakg_frontend_url: Option<String>,
+    pub error: Option<String>,
 }
 
 struct RedirectUrl(Arc<Mutex<Option<String>>>);
 
-#[get("/")]
-fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
+fn render_config_page(data: &ConfigPageData) -> RawHtml<String> {
     let db_value = data.database_url.as_deref().unwrap_or("");
-    let db_readonly = if data.database_url.is_some() {
-        "readonly"
-    } else {
-        ""
-    };
-
+    
+    let is_preset = data.error.is_none() && data.database_url.is_some();
+    
+    let db_readonly = if is_preset { "readonly" } else { "" };
     let api_value = data.mettakg_api_url.as_deref().unwrap_or("");
-    let api_readonly = if data.mettakg_api_url.is_some() {
-        "readonly"
-    } else {
-        ""
-    };
+    let api_readonly = if is_preset && data.mettakg_api_url.is_some() { "readonly" } else { "" };
 
     let mork_value = data.mork_server_url.as_deref().unwrap_or("");
-    let mork_readonly = if data.mork_server_url.is_some() {
-        "readonly"
-    } else {
-        ""
-    };
-
-    let frontend_value = data.mettakg_frontend_url.as_deref().unwrap_or("");
-    let frontend_readonly = if data.mettakg_frontend_url.is_some() {
-        "readonly"
-    } else {
-        ""
-    };
+    let mork_readonly = if is_preset && data.mork_server_url.is_some() { "readonly" } else { "" };
 
     #[cfg(feature = "sqlite")]
     let (db_placeholder, db_hint) = (
@@ -66,6 +56,20 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
         "postgres://user:password@localhost/dbname",
         "PostgreSQL connection string (e.g., postgres://mettakg_user:abc123@localhost/mettakg_db)",
     );
+
+    let error_html = if let Some(err) = &data.error {
+        format!(
+            r#"
+            <div style="background: hsla(0, 70%, 50%, 0.15); border: 1px solid hsla(0, 70%, 50%, 0.3); color: hsl(0, 80%, 70%); padding: 16px; border-radius: 0.5rem; margin-bottom: 24px; font-size: 0.9rem;">
+                <strong>Configuration Error:</strong><br>
+                {}
+            </div>
+            "#,
+            err
+        )
+    } else {
+        String::new()
+    };
 
     let html = format!(
         r#"
@@ -267,6 +271,8 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
                 <div class="subtitle">Configure your knowledge graph server</div>
             </div>
             
+            {}
+            
             <div class="card">
                 <form action="/submit" method="post">
                     <div class="section-title">Database Configuration</div>
@@ -315,19 +321,6 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
                         {}
                     </div>
                     
-                    <div class="form-group">
-                        <label>Frontend URL</label>
-                        <input 
-                            type="text" 
-                            name="mettakg_frontend_url" 
-                            placeholder="http://127.0.0.1:3000" 
-                            value="{}" 
-                            {}
-                        >
-                        <div class="hint">URL for the frontend dev server if running separately (default: http://127.0.0.1:3000)</div>
-                        {}
-                    </div>
-                    
                     <button type="submit">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M5 12h14"/>
@@ -341,32 +334,26 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
     </body>
     </html>
     "#,
+        error_html,
         db_placeholder,
         db_value,
         db_readonly,
         db_hint,
-        if data.database_url.is_some() {
+        if is_preset && data.database_url.is_some() {
             r#"<div class="preset">Set via CLI argument</div>"#
         } else {
             ""
         },
         api_value,
         api_readonly,
-        if data.mettakg_api_url.is_some() {
+        if is_preset && data.mettakg_api_url.is_some() {
             r#"<div class="preset">Set via CLI argument</div>"#
         } else {
             ""
         },
         mork_value,
         mork_readonly,
-        if data.mork_server_url.is_some() {
-            r#"<div class="preset">Set via CLI argument</div>"#
-        } else {
-            ""
-        },
-        frontend_value,
-        frontend_readonly,
-        if data.mettakg_frontend_url.is_some() {
+        if is_preset && data.mork_server_url.is_some() {
             r#"<div class="preset">Set via CLI argument</div>"#
         } else {
             ""
@@ -376,21 +363,92 @@ fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
     RawHtml(html)
 }
 
+#[get("/")]
+fn config_page(data: &State<ConfigPageData>) -> RawHtml<String> {
+    render_config_page(data)
+}
+
+fn test_connection(url: &str) -> Result<(), String> {
+    DbConnection::establish(url)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 #[post("/submit", data = "<form>")]
 async fn submit_config(
     form: Form<ConfigForm>,
     tx: &State<mpsc::Sender<ConfigForm>>,
     redirect_url: &State<RedirectUrl>,
-) -> Redirect {
+) -> Result<Redirect, RawHtml<String>> {
     let trimmed_form = ConfigForm {
         database_url: form.database_url.trim().to_string(),
-        mettakg_frontend_url: form
-            .mettakg_frontend_url
-            .as_ref()
-            .map(|s| s.trim().to_string()),
         mork_server_url: form.mork_server_url.as_ref().map(|s| s.trim().to_string()),
         mettakg_api_url: form.mettakg_api_url.as_ref().map(|s| s.trim().to_string()),
     };
+
+    let render_error = |msg: String| {
+        let data = ConfigPageData {
+            database_url: Some(trimmed_form.database_url.clone()),
+            mettakg_api_url: trimmed_form.mettakg_api_url.clone(),
+            mork_server_url: trimmed_form.mork_server_url.clone(),
+            error: Some(msg),
+        };
+        render_config_page(&data)
+    };
+
+    let api_url_str = trimmed_form
+        .mettakg_api_url
+        .clone()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
+        
+    let mork_url_str = trimmed_form
+        .mork_server_url
+        .clone()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "http://127.0.0.1:8001".to_string());
+
+    let api_url = Url::parse(&api_url_str)
+        .map_err(|_| render_error("Invalid API URL format".to_string()))?;
+    let mork_url = Url::parse(&mork_url_str)
+        .map_err(|_| render_error("Invalid Mork Server URL format".to_string()))?;
+
+    let api_port = api_url.port().unwrap_or(8000);
+    let mork_port = mork_url.port().unwrap_or(8001);
+
+    if api_port == mork_port {
+        return Err(render_error(format!(
+            "Port conflict: Both API and Mork server are configured to use port {}. Please choose different ports.",
+            api_port
+        )));
+    }
+
+    fn is_port_available(host: &str, port: u16) -> bool {
+        TcpListener::bind((host, port)).is_ok()
+    }
+
+    let api_host = api_url.host_str().unwrap_or("127.0.0.1");
+    if !is_port_available(api_host, api_port) {
+        if api_port == 8080 {
+             return Err(render_error(format!("Port {} is currently in use by this configuration interface. Please choose a different port (e.g., 8000).", api_port)));
+        }
+        return Err(render_error(format!(
+            "Port {} on {} is already in use. Please choose a different port for the API server.",
+            api_port, api_host
+        )));
+    }
+
+    let mork_host = mork_url.host_str().unwrap_or("127.0.0.1");
+    if !is_port_available(mork_host, mork_port) {
+        return Err(render_error(format!(
+            "Port {} on {} is already in use. Please choose a different port for the Mork server.",
+            mork_port, mork_host
+        )));
+    }
+
+    if let Err(e) = test_connection(&trimmed_form.database_url) {
+        return Err(render_error(format!("Failed to connect to database: {}", e)));
+    }
 
     let api_url = trimmed_form
         .mettakg_api_url
@@ -402,7 +460,7 @@ async fn submit_config(
 
     let _ = tx.send(trimmed_form).await;
 
-    Redirect::to("/waiting")
+    Ok(Redirect::to("/waiting"))
 }
 
 #[get("/waiting")]
@@ -497,13 +555,11 @@ fn waiting_page(redirect_url: &State<RedirectUrl>) -> RawHtml<String> {
                         if (attempts < maxAttempts) {{
                             setTimeout(checkServer, 1000);
                         }} else {{
-                            // After 30 seconds, just redirect anyway
                             window.location.href = apiUrl;
                         }}
                     }});
             }}
             
-            // Start checking after 2 seconds
             setTimeout(checkServer, 2000);
         </script>
     </head>
@@ -550,7 +606,6 @@ pub async fn launch_config_server(preset_config: ConfigPageData) -> Cli {
 
     Cli {
         database_url: Some(config_form.database_url),
-        mettakg_frontend_url: config_form.mettakg_frontend_url.filter(|s| !s.is_empty()),
         mork_server_url: config_form.mork_server_url.filter(|s| !s.is_empty()),
         mettakg_api_url: config_form.mettakg_api_url.filter(|s| !s.is_empty()),
     }
