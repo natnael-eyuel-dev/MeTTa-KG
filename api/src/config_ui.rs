@@ -13,7 +13,7 @@ use url::Url;
 #[cfg(feature = "sqlite")]
 use diesel::sqlite::SqliteConnection as DbConnection;
 
-#[cfg(feature = "postgres")]
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 use diesel::pg::PgConnection as DbConnection;
 
 #[derive(Clone, FromForm)]
@@ -35,15 +35,23 @@ struct RedirectUrl(Arc<Mutex<Option<String>>>);
 
 fn render_config_page(data: &ConfigPageData) -> RawHtml<String> {
     let db_value = data.database_url.as_deref().unwrap_or("");
-    
+
     let is_preset = data.error.is_none() && data.database_url.is_some();
-    
+
     let db_readonly = if is_preset { "readonly" } else { "" };
     let api_value = data.mettakg_api_url.as_deref().unwrap_or("");
-    let api_readonly = if is_preset && data.mettakg_api_url.is_some() { "readonly" } else { "" };
+    let api_readonly = if is_preset && data.mettakg_api_url.is_some() {
+        "readonly"
+    } else {
+        ""
+    };
 
     let mork_value = data.mork_server_url.as_deref().unwrap_or("");
-    let mork_readonly = if is_preset && data.mork_server_url.is_some() { "readonly" } else { "" };
+    let mork_readonly = if is_preset && data.mork_server_url.is_some() {
+        "readonly"
+    } else {
+        ""
+    };
 
     #[cfg(feature = "sqlite")]
     let (db_placeholder, db_hint) = (
@@ -51,7 +59,7 @@ fn render_config_page(data: &ConfigPageData) -> RawHtml<String> {
         "SQLite database file path (e.g., metta_kg.db)",
     );
 
-    #[cfg(feature = "postgres")]
+    #[cfg(all(feature = "postgres", not(feature = "sqlite")))]
     let (db_placeholder, db_hint) = (
         "postgres://user:password@localhost/dbname",
         "PostgreSQL connection string (e.g., postgres://mettakg_user:abc123@localhost/mettakg_db)",
@@ -401,15 +409,15 @@ async fn submit_config(
         .clone()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
-        
+
     let mork_url_str = trimmed_form
         .mork_server_url
         .clone()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://127.0.0.1:8001".to_string());
 
-    let api_url = Url::parse(&api_url_str)
-        .map_err(|_| render_error("Invalid API URL format".to_string()))?;
+    let api_url =
+        Url::parse(&api_url_str).map_err(|_| render_error("Invalid API URL format".to_string()))?;
     let mork_url = Url::parse(&mork_url_str)
         .map_err(|_| render_error("Invalid Mork Server URL format".to_string()))?;
 
@@ -430,7 +438,7 @@ async fn submit_config(
     let api_host = api_url.host_str().unwrap_or("127.0.0.1");
     if !is_port_available(api_host, api_port) {
         if api_port == 8080 {
-             return Err(render_error(format!("Port {} is currently in use by this configuration interface. Please choose a different port (e.g., 8000).", api_port)));
+            return Err(render_error(format!("Port {} is currently in use by this configuration interface. Please choose a different port (e.g., 8000).", api_port)));
         }
         return Err(render_error(format!(
             "Port {} on {} is already in use. Please choose a different port for the API server.",
@@ -447,7 +455,10 @@ async fn submit_config(
     }
 
     if let Err(e) = test_connection(&trimmed_form.database_url) {
-        return Err(render_error(format!("Failed to connect to database: {}", e)));
+        return Err(render_error(format!(
+            "Failed to connect to database: {}",
+            e
+        )));
     }
 
     let api_url = trimmed_form

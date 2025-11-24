@@ -22,13 +22,13 @@ use url::Url;
 #[cfg(feature = "sqlite")]
 use diesel::sqlite::SqliteConnection as DbConnection;
 
-#[cfg(feature = "postgres")]
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 use diesel::pg::PgConnection as DbConnection;
 
 #[cfg(feature = "sqlite")]
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 
-#[cfg(feature = "postgres")]
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
 
 pub const MORK_BYTES: &[u8] = include_bytes!(env!("MORK_BINARY_PATH"));

@@ -17,7 +17,7 @@ diesel::table! {
     }
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 diesel::table! {
     tokens (id) {
         id -> Int4,

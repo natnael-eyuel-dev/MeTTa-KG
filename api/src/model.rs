@@ -6,7 +6,7 @@ use rocket::serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlite")]
 type DbInt = i32;
 
-#[cfg(feature = "postgres")]
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 type DbInt = i32;
 
 #[derive(Serialize, Deserialize, Insertable, Clone)]
