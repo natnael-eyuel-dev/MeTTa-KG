@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             || cli.mettakg_api_url.is_none();
 
         if needs_config {
-            println!("Launching configuration web interface at http://127.0.0.1:8080");
+            println!("Launching configuration web interface at http://127.0.0.1:8000");
             println!("Please open your browser and configure the server.");
 
             let preset_config = ConfigPageData {

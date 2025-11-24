@@ -435,17 +435,6 @@ async fn submit_config(
         TcpListener::bind((host, port)).is_ok()
     }
 
-    let api_host = api_url.host_str().unwrap_or("127.0.0.1");
-    if !is_port_available(api_host, api_port) {
-        if api_port == 8080 {
-            return Err(render_error(format!("Port {} is currently in use by this configuration interface. Please choose a different port (e.g., 8000).", api_port)));
-        }
-        return Err(render_error(format!(
-            "Port {} on {} is already in use. Please choose a different port for the API server.",
-            api_port, api_host
-        )));
-    }
-
     let mork_host = mork_url.host_str().unwrap_or("127.0.0.1");
     if !is_port_available(mork_host, mork_port) {
         return Err(render_error(format!(
@@ -547,31 +536,26 @@ fn waiting_page(redirect_url: &State<RedirectUrl>) -> RawHtml<String> {
             }}
         </style>
         <script>
-            // Poll the API URL to check if it's ready, then redirect
-            const apiUrl = '{}';
-            let attempts = 0;
-            const maxAttempts = 30; // Try for 30 seconds
+            const targetUrl = '{}';
+            const probeUrl = targetUrl.replace(/\/$/, "") + "/api/tokens";
             
             function checkServer() {{
-                attempts++;
-                fetch(apiUrl + '/health')
+                fetch(probeUrl)
                     .then(response => {{
-                        if (response.ok) {{
-                            window.location.href = apiUrl;
-                        }} else if (attempts < maxAttempts) {{
+                        // If we get ANY response (even 401 Unauthorized), the server is running
+                        if (response.status >= 200 && response.status < 600) {{
+                            window.location.href = targetUrl;
+                        }} else {{
                             setTimeout(checkServer, 1000);
                         }}
                     }})
                     .catch(() => {{
-                        if (attempts < maxAttempts) {{
-                            setTimeout(checkServer, 1000);
-                        }} else {{
-                            window.location.href = apiUrl;
-                        }}
+                        setTimeout(checkServer, 1000);
                     }});
             }}
             
-            setTimeout(checkServer, 2000);
+            // Start checking after 3 seconds to give the server time to restart
+            setTimeout(checkServer, 3000);
         </script>
     </head>
     <body>
@@ -602,7 +586,7 @@ pub async fn launch_config_server(preset_config: ConfigPageData) -> Cli {
         .mount("/", routes![config_page, submit_config, waiting_page])
         .configure(rocket::Config {
             address: "127.0.0.1".parse().unwrap(),
-            port: 8080,
+            port: 8000,
             ..Default::default()
         });
 

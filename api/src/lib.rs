@@ -186,7 +186,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
 
     rocket::custom(figment)
         .mount(
-            "/",
+            "/api",
             routes![
                 routes::translations::create_from_csv,
                 routes::translations::create_from_nt,
