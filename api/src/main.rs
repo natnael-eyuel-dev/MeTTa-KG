@@ -10,13 +10,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cli = Cli::parse();
 
     let all_provided = cli.database_url.is_some()
-        && cli.mettakg_frontend_url.is_some()
         && cli.mork_server_url.is_some()
         && cli.mettakg_api_url.is_some();
 
     if !all_provided {
         let needs_config = cli.database_url.is_none()
-            || cli.mettakg_frontend_url.is_none()
             || cli.mork_server_url.is_none()
             || cli.mettakg_api_url.is_none();
 
@@ -28,13 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 database_url: cli.database_url.clone(),
                 mettakg_api_url: cli.mettakg_api_url.clone(),
                 mork_server_url: cli.mork_server_url.clone(),
-                mettakg_frontend_url: cli.mettakg_frontend_url.clone(),
+                error: None,
             };
 
             let config_cli = launch_config_server(preset_config).await;
 
             cli.database_url = cli.database_url.or(config_cli.database_url);
-            cli.mettakg_frontend_url = cli.mettakg_frontend_url.or(config_cli.mettakg_frontend_url);
             cli.mork_server_url = cli.mork_server_url.or(config_cli.mork_server_url);
             cli.mettakg_api_url = cli.mettakg_api_url.or(config_cli.mettakg_api_url);
         }
@@ -50,9 +47,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let final_cli = Cli {
         database_url: Some(database_url.clone()),
-        mettakg_frontend_url: cli
-            .mettakg_frontend_url
-            .or_else(|| Some("http://127.0.0.1:3000".to_string())),
         mork_server_url: Some(mork_server_url),
         mettakg_api_url: Some(mettakg_api_url),
     };
