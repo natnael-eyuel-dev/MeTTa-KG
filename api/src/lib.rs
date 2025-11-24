@@ -96,6 +96,7 @@ async fn spawn_mork_server(mork_url: &str) {
     tokio::spawn(async move {
         let mut cmd = tokio::process::Command::new(&temp_path);
         cmd.env("MORK_SERVER_PORT", port);
+        cmd.kill_on_drop(true);
 
         match cmd.spawn() {
             Ok(mut child) => {
