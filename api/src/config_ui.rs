@@ -4,7 +4,6 @@ use rocket::form::Form;
 use rocket::response::content::RawHtml;
 use rocket::response::Redirect;
 use rocket::{get, post, routes, FromForm, State};
-use std::net::TcpListener;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
@@ -391,18 +390,6 @@ async fn submit_config(
         return Err(render_error(format!(
             "Port conflict: Both API and Mork server are configured to use port {}. Please choose different ports.",
             api_port
-        )));
-    }
-
-    fn is_port_available(host: &str, port: u16) -> bool {
-        TcpListener::bind((host, port)).is_ok()
-    }
-
-    let mork_host = mork_url.host_str().unwrap_or("127.0.0.1");
-    if !is_port_available(mork_host, mork_port) {
-        return Err(render_error(format!(
-            "Port {} on {} is already in use. Please choose a different port for the Mork server.",
-            mork_port, mork_host
         )));
     }
 
