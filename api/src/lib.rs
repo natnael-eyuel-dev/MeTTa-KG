@@ -1,10 +1,3 @@
-pub mod cli;
-pub mod db;
-pub mod model;
-pub mod mork_api;
-pub mod routes;
-pub mod schema;
-
 use crate::cli::Cli;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use mime_guess::from_path;
@@ -18,6 +11,13 @@ use std::{env, fs};
 use tempfile::Builder;
 use tokio::time::Duration;
 use url::Url;
+
+pub mod cli;
+pub mod db;
+pub mod model;
+pub mod mork_api;
+pub mod routes;
+pub mod schema;
 
 #[cfg(feature = "sqlite")]
 use diesel::sqlite::SqliteConnection as DbConnection;
@@ -42,7 +42,7 @@ fn index() -> Option<(ContentType, Vec<u8>)> {
     UiAssets::get("index.html").map(|data| (ContentType::HTML, data.data.into_owned()))
 }
 
-#[get("/<file..>")]
+#[get("/<file..>", rank = 2)]
 fn dist(file: PathBuf) -> Option<(ContentType, Vec<u8>)> {
     let filename = file.to_str()?;
 
@@ -200,9 +200,9 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
                 routes::tokens::delete,
                 routes::tokens::delete_batch,
                 routes::spaces::read,
-                routes::spaces::upload,
                 routes::spaces::import,
                 routes::spaces::transform,
+                routes::spaces::upload,
                 routes::spaces::explore,
                 routes::spaces::export,
                 routes::spaces::clear,

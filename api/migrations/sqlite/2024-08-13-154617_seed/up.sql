@@ -11,7 +11,7 @@ INSERT INTO tokens (
   permission_share_write
 ) VALUES (
   0, 
-  lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(6))),
+  '200003ee-c651-4069-8b7f-2ad9fb46c3ab',
   'DeepFunding KG', 
   '/',
   CURRENT_TIMESTAMP,
