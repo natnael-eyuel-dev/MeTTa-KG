@@ -7,7 +7,9 @@ use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;
 
-use crate::integrations::common;
+#[path = "common.rs"]
+mod common;
+// use crate::common;
 
 #[tokio::test]
 #[serial]
@@ -28,7 +30,9 @@ async fn test_explore_success() {
         then.status(200).body("(explore result)");
     });
 
-    let cli = metta_kg::cli::Cli::parse();
+    let mut cli = metta_kg::cli::Cli::parse();
+    cli.mork_server_url = Some(server.base_url());
+    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
     // Create client
     let client = Client::tracked(rocket(&cli).await)
         .await
@@ -40,7 +44,7 @@ async fn test_explore_success() {
     };
 
     let response = client
-        .post("/spaces/explore/test/space")
+        .post("/api/spaces/explore/test/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&explore_input)
         .dispatch()
@@ -65,7 +69,9 @@ async fn test_non_existent_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let cli = metta_kg::cli::Cli::parse();
+    let mut cli = metta_kg::cli::Cli::parse();
+    cli.mork_server_url = Some(server.base_url());
+    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
     // Create client
     let client = Client::tracked(rocket(&cli).await)
         .await
@@ -78,7 +84,7 @@ async fn test_non_existent_namespace() {
 
     // Path does not start with /test/
     let response = client
-        .post("/spaces/explore/other/space")
+        .post("/api/spaces/explore/other/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&explore_input)
         .dispatch()
@@ -108,7 +114,9 @@ async fn test_existing_empty_namespace() {
         then.status(200).body("(explore result)");
     });
 
-    let cli = metta_kg::cli::Cli::parse();
+    let mut cli = metta_kg::cli::Cli::parse();
+    cli.mork_server_url = Some(server.base_url());
+    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
     // Create client
     let client = Client::tracked(rocket(&cli).await)
         .await
@@ -120,7 +128,7 @@ async fn test_existing_empty_namespace() {
     };
 
     let response = client
-        .post("/spaces/explore/test/space")
+        .post("/api/spaces/explore/test/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&explore_input)
         .dispatch()
@@ -152,7 +160,9 @@ async fn test_non_empty_namespace() {
         then.status(200).body("(explore result)");
     });
 
-    let cli = metta_kg::cli::Cli::parse();
+    let mut cli = metta_kg::cli::Cli::parse();
+    cli.mork_server_url = Some(server.base_url());
+    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
     // Create client
     let client = Client::tracked(rocket(&cli).await)
         .await
@@ -164,7 +174,7 @@ async fn test_non_empty_namespace() {
     };
 
     let response = client
-        .post("/spaces/explore/test/space")
+        .post("/api/spaces/explore/test/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&explore_input)
         .dispatch()
@@ -196,7 +206,9 @@ async fn test_different_namespaces() {
         then.status(200).body("(explore result)");
     });
 
-    let cli = metta_kg::cli::Cli::parse();
+    let mut cli = metta_kg::cli::Cli::parse();
+    cli.mork_server_url = Some(server.base_url());
+    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
     // Create client
     let client = Client::tracked(rocket(&cli).await)
         .await
@@ -209,7 +221,7 @@ async fn test_different_namespaces() {
 
     // Explore in ns1
     let response1 = client
-        .post("/spaces/explore/ns1/space")
+        .post("/api/spaces/explore/ns1/space")
         .header(Header::new("authorization", token1.code.clone()))
         .json(&explore_input)
         .dispatch()
@@ -218,7 +230,7 @@ async fn test_different_namespaces() {
 
     // Explore in ns2
     let response2 = client
-        .post("/spaces/explore/ns2/space")
+        .post("/api/spaces/explore/ns2/space")
         .header(Header::new("authorization", token2.code.clone()))
         .json(&explore_input)
         .dispatch()
@@ -240,7 +252,9 @@ async fn test_namespace_mismatch() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let cli = metta_kg::cli::Cli::parse();
+    let mut cli = metta_kg::cli::Cli::parse();
+    cli.mork_server_url = Some(server.base_url());
+    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
     // Create client
     let client = Client::tracked(rocket(&cli).await)
         .await
@@ -253,7 +267,7 @@ async fn test_namespace_mismatch() {
 
     // Path does not start with /test/
     let response = client
-        .post("/spaces/explore/other/space")
+        .post("/api/spaces/explore/other/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&explore_input)
         .dispatch()
