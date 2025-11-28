@@ -140,6 +140,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
 
     let mut origins = vec![
         "http://localhost:3000".to_string(),
+        "http://localhost:8000".to_string(),
         "https://metta-kg.vercel.app".to_string(),
         "http://127.0.0.1:3000".to_string(),
         "http://127.0.0.1:8000".to_string(),
