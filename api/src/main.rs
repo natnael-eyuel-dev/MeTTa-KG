@@ -8,15 +8,12 @@ use metta_kg::{cli::Cli, db, rocket};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cli = Cli::parse();
+    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
 
-    let all_provided = cli.database_url.is_some()
-        && cli.mork_server_url.is_some()
-        && cli.mettakg_api_url.is_some();
+    let all_provided = cli.database_url.is_some() && cli.mork_server_url.is_some();
 
     if !all_provided {
-        let needs_config = cli.database_url.is_none()
-            || cli.mork_server_url.is_none()
-            || cli.mettakg_api_url.is_none();
+        let needs_config = cli.database_url.is_none() || cli.mork_server_url.is_none();
 
         if needs_config {
             println!("Launching configuration web interface at http://127.0.0.1:8000");
@@ -24,7 +21,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let preset_config = ConfigPageData {
                 database_url: cli.database_url.clone(),
-                mettakg_api_url: cli.mettakg_api_url.clone(),
                 mork_server_url: cli.mork_server_url.clone(),
                 error: None,
             };
@@ -33,7 +29,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             cli.database_url = cli.database_url.or(config_cli.database_url);
             cli.mork_server_url = cli.mork_server_url.or(config_cli.mork_server_url);
-            cli.mettakg_api_url = cli.mettakg_api_url.or(config_cli.mettakg_api_url);
         }
     }
 

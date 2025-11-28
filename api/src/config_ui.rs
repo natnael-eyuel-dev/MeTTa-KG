@@ -20,13 +20,11 @@ use diesel::pg::PgConnection as DbConnection;
 struct ConfigForm {
     database_url: String,
     mork_server_url: Option<String>,
-    mettakg_api_url: Option<String>,
 }
 
 #[derive(Clone)]
 pub struct ConfigPageData {
     pub database_url: Option<String>,
-    pub mettakg_api_url: Option<String>,
     pub mork_server_url: Option<String>,
     pub error: Option<String>,
 }
@@ -39,12 +37,6 @@ fn render_config_page(data: &ConfigPageData) -> RawHtml<String> {
     let is_preset = data.error.is_none() && data.database_url.is_some();
 
     let db_readonly = if is_preset { "readonly" } else { "" };
-    let api_value = data.mettakg_api_url.as_deref().unwrap_or("");
-    let api_readonly = if is_preset && data.mettakg_api_url.is_some() {
-        "readonly"
-    } else {
-        ""
-    };
 
     let mork_value = data.mork_server_url.as_deref().unwrap_or("");
     let mork_readonly = if is_preset && data.mork_server_url.is_some() {
@@ -302,21 +294,9 @@ fn render_config_page(data: &ConfigPageData) -> RawHtml<String> {
                     
                     <div class="divider"></div>
                     
-                    <div class="section-title">Server Configuration</div>
-                    <div class="form-group">
-                        <label>API URL</label>
-                        <input 
-                            type="text" 
-                            name="mettakg_api_url" 
-                            placeholder="http://127.0.0.1:8000" 
-                            value="{}" 
-                            {}
-                        >
-                        <div class="hint">URL where the MeTTa-KG API server will listen (default: http://127.0.0.1:8000)</div>
-                        {}
-                    </div>
-                    
-                    <div class="form-group">
+                     <div class="section-title">Server Configuration</div>
+
+                     <div class="form-group">
                         <label>Mork Server URL</label>
                         <input 
                             type="text" 
@@ -348,13 +328,6 @@ fn render_config_page(data: &ConfigPageData) -> RawHtml<String> {
         db_readonly,
         db_hint,
         if is_preset && data.database_url.is_some() {
-            r#"<div class="preset">Set via CLI argument</div>"#
-        } else {
-            ""
-        },
-        api_value,
-        api_readonly,
-        if is_preset && data.mettakg_api_url.is_some() {
             r#"<div class="preset">Set via CLI argument</div>"#
         } else {
             ""
@@ -391,24 +364,16 @@ async fn submit_config(
     let trimmed_form = ConfigForm {
         database_url: form.database_url.trim().to_string(),
         mork_server_url: form.mork_server_url.as_ref().map(|s| s.trim().to_string()),
-        mettakg_api_url: form.mettakg_api_url.as_ref().map(|s| s.trim().to_string()),
     };
 
     let render_error = |msg: String| {
         let data = ConfigPageData {
             database_url: Some(trimmed_form.database_url.clone()),
-            mettakg_api_url: trimmed_form.mettakg_api_url.clone(),
             mork_server_url: trimmed_form.mork_server_url.clone(),
             error: Some(msg),
         };
         render_config_page(&data)
     };
-
-    let api_url_str = trimmed_form
-        .mettakg_api_url
-        .clone()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
 
     let mork_url_str = trimmed_form
         .mork_server_url
@@ -416,12 +381,10 @@ async fn submit_config(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://127.0.0.1:8001".to_string());
 
-    let api_url =
-        Url::parse(&api_url_str).map_err(|_| render_error("Invalid API URL format".to_string()))?;
     let mork_url = Url::parse(&mork_url_str)
         .map_err(|_| render_error("Invalid Mork Server URL format".to_string()))?;
 
-    let api_port = api_url.port().unwrap_or(8000);
+    let api_port = 8000;
     let mork_port = mork_url.port().unwrap_or(8001);
 
     if api_port == mork_port {
@@ -450,11 +413,7 @@ async fn submit_config(
         )));
     }
 
-    let api_url = trimmed_form
-        .mettakg_api_url
-        .clone()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
+    let api_url = "http://127.0.0.1:8000".to_string();
 
     *redirect_url.0.lock().await = Some(api_url.clone());
 
@@ -602,6 +561,6 @@ pub async fn launch_config_server(preset_config: ConfigPageData) -> Cli {
     Cli {
         database_url: Some(config_form.database_url),
         mork_server_url: config_form.mork_server_url.filter(|s| !s.is_empty()),
-        mettakg_api_url: config_form.mettakg_api_url.filter(|s| !s.is_empty()),
+        mettakg_api_url: Some("http://127.0.0.1:8000".to_string()),
     }
 }
