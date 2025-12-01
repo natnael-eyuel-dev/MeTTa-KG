@@ -155,23 +155,36 @@ export const createFromN3 = (file: File) => {
 
 export async function isPathClear(path: string): Promise<boolean> {
   try {
-    const cleanPath = path.replace(/^\/+|\/+$/g, "");
-
+    const cleanPath = path.replace(/\/+$/g, "");
     const requestBody = {
       pattern: "$x",
       token: "",
     };
 
-    // TODO: use requests function and return value from it
-    const _response = await fetch(`${API_URL}/spaces/explore${cleanPath}`, {
+    const explorePath = cleanPath.startsWith("/")
+      ? `/spaces/explore${cleanPath}`
+      : `/spaces/explore/${cleanPath}`;
+
+    const finalUrl = `${API_URL}${explorePath}`;
+
+    const auth = rootToken();
+    if (!auth) {
+      throw new Error("Authorization token is missing.");
+    }
+
+    const response = await fetch(finalUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: auth,
+      },
       body: JSON.stringify(requestBody),
     });
 
-    return true;
-  } catch {
-    return true;
+    return response.ok;
+  } catch (error) {
+    console.error("Error in isPathClear:", error);
+    return false;
   }
 }
 
