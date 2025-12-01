@@ -300,6 +300,67 @@ pub async fn transform(
 ////////////////////////////////////////////// SET OPERATIONS //////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Performs a subspace operation: extracts all tails under a given prefix from a source namespace into a target namespace.
+/// The pattern: (transform (, (<source_namespace> (<prefix> $x))) (, (<target_namespace> $x)))
+/// Performs a subspace operation using SetOperationInput.
+/// source[0]: source namespace
+/// source[1]: prefix
+/// target[0]: target namespace
+#[post("/spaces/subspace", data = "<input>")]
+pub async fn subspace(token: Token, input: Json<SetOperationInput>) -> Result<Json<bool>, Status> {
+    let input = input.into_inner();
+    let token_namespace = token.namespace.strip_prefix("/").unwrap_or("");
+
+    if input.source.len() < 2 || input.target.is_empty() {
+        return Err(Status::BadRequest);
+    }
+
+    let source_namespace = input.source[0].trim_start_matches('/').to_string();
+    let prefix = input.source[1].trim().to_string();
+    let target_namespace = input.target[0].trim_start_matches('/').to_string();
+
+    let token_namespace = token_namespace.trim_start_matches('/');
+    if !source_namespace.starts_with(token_namespace)
+        || !target_namespace.starts_with(token_namespace)
+    {
+        return Err(Status::Unauthorized);
+    }
+
+    if prefix.is_empty() {
+        return Err(Status::BadRequest);
+    }
+
+    if !token.permission_read || !token.permission_write {
+        return Err(Status::Unauthorized);
+    }
+
+    let source_label = source_namespace
+        .split('/')
+        .next()
+        .unwrap_or(source_namespace.as_str());
+    let pattern_str = format!("({} ({} $x))", source_label, prefix);
+    let template_str = "$x".to_string();
+    let pattern = Pattern::default()
+        .pattern(pattern_str.clone())
+        .namespace(source_namespace.clone().into());
+    let template = Template::default()
+        .template(template_str.clone())
+        .namespace(target_namespace.clone().into());
+
+    let mork_api_client = MorkApiClient::new();
+
+    let request = TransformRequest::new().transform_input(
+        TransformDetails::new()
+            .patterns(vec![pattern.clone()])
+            .templates(vec![template.clone()]),
+    );
+
+    match mork_api_client.dispatch(request).await {
+        Ok(_) => Ok(Json(true)),
+        Err(e) => Err(e),
+    }
+}
+
 /// Performs a composition operation on provided namespaces. `token` must have `permission_write`
 /// on the target namespace and `permission_read` on all source namespaces.
 /// # Composition Transformation
