@@ -7,6 +7,7 @@ import CompositionPage from "../composition/Composition";
 import ExportPage from "../export/Export";
 import TokensPage from "../tokens/Tokens";
 import ClearPage from "../clear/Clear";
+import SubspacePage from "../subspace/Subspace";
 import Sidebar from "~/pages/index/components/Sidebar";
 import Header from "~/pages/index/components/Header";
 import Upload from "lucide-solid/icons/upload";
@@ -77,6 +78,13 @@ const sidebarSections = [
         label: "Restrict",
         icon: () => <span class="text-xl font-bold">◁</span>,
         to: "/restrict",
+      },
+      {
+        id: "subspace",
+        label: "Subspace",
+        icon: () => <span class="text-xl">S</span>,
+        to: "/subspace",
+        component: SubspacePage,
       },
       {
         id: "decapitate",
