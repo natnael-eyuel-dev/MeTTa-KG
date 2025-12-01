@@ -55,7 +55,7 @@ const SubspacePage: Component = () => {
     };
 
     const filteredSourceNs = sourcePattern.namespace.filter((ns) => ns);
-    const prefix = sourcePattern.value || " ";
+    const prefix = sourcePattern.value || "";
     const filteredTargetNs = targetTemplate.namespace.filter((ns) => ns);
 
     const sourcePath =
