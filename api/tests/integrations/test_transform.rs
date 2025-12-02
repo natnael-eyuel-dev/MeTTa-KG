@@ -1,9 +1,9 @@
-use clap::Parser;
 use httpmock::prelude::*;
 use metta_kg::rocket;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;
+use std::env;
 
 use crate::integrations::common;
 use metta_kg::routes::spaces::Mm2InputMulti;
@@ -28,10 +28,14 @@ async fn test_transform_success() {
         then.status(200).body("Transform successful");
     });
 
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Create client
-    let cli = metta_kg::cli::Cli::parse();
-    // Create client
-    let client = Client::tracked(rocket(&cli).await)
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -66,9 +70,14 @@ async fn test_non_existent_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let cli = metta_kg::cli::Cli::parse();
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Create client
-    let client = Client::tracked(rocket(&cli).await)
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -107,9 +116,14 @@ async fn test_existing_empty_namespace() {
         then.status(200).body("Transform successful");
     });
 
-    let cli = metta_kg::cli::Cli::parse();
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Create client
-    let client = Client::tracked(rocket(&cli).await)
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -150,9 +164,14 @@ async fn test_different_namespaces() {
         then.status(200).body("Transform successful");
     });
 
-    let cli = metta_kg::cli::Cli::parse();
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Create client
-    let client = Client::tracked(rocket(&cli).await)
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -194,9 +213,14 @@ async fn test_namespace_mismatch() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let cli = metta_kg::cli::Cli::parse();
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Create client
-    let client = Client::tracked(rocket(&cli).await)
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
