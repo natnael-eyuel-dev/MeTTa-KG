@@ -1,53 +1,30 @@
-mod cli;
-mod config_ui;
-
 use clap::Parser;
-use config_ui::{launch_config_server, ConfigPageData};
-use metta_kg::{cli::Cli, db, rocket};
+use metta_kg::{
+    cli::{AppConfig, Cli},
+    db, launch_setup_server, rocket,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cli = Cli::parse();
-    cli.mettakg_api_url = Some("http://127.0.0.1:8000".to_string());
+    let cli = Cli::parse();
+    let setup_config = launch_setup_server(cli.mettakg_api_url.clone()).await;
 
-    let all_provided = cli.database_url.is_some() && cli.mork_server_url.is_some();
+    let raw_api_url = cli.mettakg_api_url.unwrap_or(setup_config.mettakg_api_url);
 
-    if !all_provided {
-        let needs_config = cli.database_url.is_none() || cli.mork_server_url.is_none();
-
-        if needs_config {
-            println!("Launching configuration web interface at http://127.0.0.1:8000");
-            println!("Please open your browser and configure the server.");
-
-            let preset_config = ConfigPageData {
-                database_url: cli.database_url.clone(),
-                mork_server_url: cli.mork_server_url.clone(),
-                error: None,
-            };
-
-            let config_cli = launch_config_server(preset_config).await;
-
-            cli.database_url = cli.database_url.or(config_cli.database_url);
-            cli.mork_server_url = cli.mork_server_url.or(config_cli.mork_server_url);
-        }
-    }
-
-    let database_url = cli.database_url.expect("Database URL must be provided");
-    let mork_server_url = cli
-        .mork_server_url
-        .unwrap_or_else(|| "http://127.0.0.1:8001".to_string());
-    let mettakg_api_url = cli
-        .mettakg_api_url
-        .unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
-
-    let final_cli = Cli {
-        database_url: Some(database_url.clone()),
-        mork_server_url: Some(mork_server_url),
-        mettakg_api_url: Some(mettakg_api_url),
+    let mettakg_api_url = if !raw_api_url.contains("://") {
+        format!("http://{}", raw_api_url)
+    } else {
+        raw_api_url
     };
 
-    db::init_database_url(database_url);
-    let rocket_instance = rocket(&final_cli).await;
+    let final_config = AppConfig {
+        database_url: setup_config.database_url,
+        mork_server_url: setup_config.mork_server_url,
+        mettakg_api_url,
+    };
+
+    db::init_database_url(final_config.database_url.clone());
+    let rocket_instance = rocket(&final_config).await;
     rocket_instance.launch().await?;
     Ok(())
 }

@@ -1,7 +1,19 @@
-use crate::cli::Cli;
+pub mod cli;
+pub mod db;
+pub mod model;
+pub mod mork_api;
+pub mod routes;
+pub mod schema;
+
+use crate::cli::AppConfig;
+use diesel::Connection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use mime_guess::from_path;
-use rocket::{get, http::ContentType};
+use rocket::form::Form;
+use rocket::response::status;
+use rocket::Shutdown;
+use rocket::State;
+use rocket::{get, http::ContentType, post};
 use rocket::{http::Method, routes, Build, Rocket};
 use rocket_cors::AllowedOrigins;
 use rust_embed::RustEmbed;
@@ -9,15 +21,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
 use tempfile::Builder;
+use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
 use url::Url;
-
-pub mod cli;
-pub mod db;
-pub mod model;
-pub mod mork_api;
-pub mod routes;
-pub mod schema;
 
 #[cfg(feature = "sqlite")]
 use diesel::sqlite::SqliteConnection as DbConnection;
@@ -36,6 +42,13 @@ pub const MORK_BYTES: &[u8] = include_bytes!(env!("MORK_BINARY_PATH"));
 #[derive(RustEmbed)]
 #[folder = "ui-dist/"]
 pub struct UiAssets;
+
+#[derive(rocket::FromForm)]
+pub struct SetupForm {
+    pub database_url: String,
+    pub mork_server_url: String,
+    pub mettakg_api_url: String,
+}
 
 #[get("/")]
 fn index() -> Option<(ContentType, Vec<u8>)> {
@@ -60,9 +73,122 @@ fn dist(file: PathBuf) -> Option<(ContentType, Vec<u8>)> {
     }
 }
 
+fn test_connection(url: &str) -> Result<(), String> {
+    #[cfg(feature = "sqlite")]
+    {
+        diesel::sqlite::SqliteConnection::establish(url)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    #[cfg(all(feature = "postgres", not(feature = "sqlite")))]
+    {
+        diesel::pg::PgConnection::establish(url)
+            .map(|_| ())
+            .map_err(|e| {
+                let err_msg = e.to_string();
+                if err_msg.contains("could not translate host name") {
+                    format!("{} (Hint: If running locally, try 'localhost' instead of docker service names like 'db')", err_msg)
+                } else {
+                    err_msg
+                }
+            })
+    }
+
+    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+    {
+        println!("No database feature enabled");
+        Err("No database feature enabled".to_string())
+    }
+}
+
+#[post("/submit", data = "<form>")]
+async fn submit_setup(
+    form: Form<SetupForm>,
+    tx: &State<Sender<AppConfig>>,
+    shutdown: Shutdown,
+) -> Result<(), status::BadRequest<String>> {
+    if let Err(e) = test_connection(&form.database_url) {
+        println!("Connection test failed: {}", e);
+        return Err(status::BadRequest(format!(
+            "Database connection failed: {}",
+            e
+        )));
+    }
+
+    let config = AppConfig {
+        database_url: form.database_url.clone(),
+        mork_server_url: form.mork_server_url.clone(),
+        mettakg_api_url: form.mettakg_api_url.clone(),
+    };
+
+    if (tx.send(config).await).is_err() {
+        return Err(status::BadRequest(
+            "Failed to process configuration internally.".to_string(),
+        ));
+    }
+
+    shutdown.notify();
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct BuildInfo {
+    db_type: &'static str,
+}
+
+#[get("/build-info")]
+fn build_info() -> rocket::serde::json::Json<BuildInfo> {
+    let db_type = if cfg!(feature = "sqlite") {
+        "sqlite"
+    } else {
+        "postgres"
+    };
+    rocket::serde::json::Json(BuildInfo { db_type })
+}
+
+pub async fn launch_setup_server(preferred_url: Option<String>) -> AppConfig {
+    let (address, port) = if let Some(url_str) = preferred_url {
+        let url_str = if !url_str.contains("://") {
+            format!("http://{}", url_str)
+        } else {
+            url_str
+        };
+
+        match Url::parse(&url_str) {
+            Ok(url) => (
+                url.host_str().unwrap_or("127.0.0.1").to_string(),
+                url.port().unwrap_or(8000),
+            ),
+            Err(_) => ("127.0.0.1".to_string(), 8000),
+        }
+    } else {
+        ("127.0.0.1".to_string(), 8000)
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<AppConfig>(1);
+
+    let figment = rocket::Config::figment()
+        .merge(("port", port))
+        .merge(("address", address))
+        .merge(("log_level", rocket::config::LogLevel::Normal));
+
+    let server = rocket::custom(figment)
+        .mount("/", routes![index, dist, submit_setup, build_info])
+        .manage(tx)
+        .ignite()
+        .await
+        .expect("Failed to ignite setup server");
+
+    let _ = server.launch().await;
+
+    rx.recv().await.expect("Failed to receive configuration")
+}
+
 async fn spawn_mork_server(mork_url: &str) {
     let url = url::Url::parse(mork_url).expect("Invalid Mork server URL");
     let port = url.port().expect("URL must include a port").to_string();
+    let host = url.host_str().expect("URL must include a host").to_string();
 
     let temp_file = Builder::new()
         .prefix("mork_server_")
@@ -74,6 +200,11 @@ async fn spawn_mork_server(mork_url: &str) {
         .as_file()
         .write_all(MORK_BYTES)
         .expect("Failed to write mork binary to temp file");
+
+    temp_file
+        .as_file()
+        .sync_all()
+        .expect("Failed to sync mork binary");
 
     let temp_path = temp_file.into_temp_path();
 
@@ -87,22 +218,26 @@ async fn spawn_mork_server(mork_url: &str) {
         fs::set_permissions(&temp_path, perms).expect("Failed to set executable permissions");
     }
 
-    let mork_path_str = temp_path.to_str().expect("Invalid UTF-8 in path");
-    println!(
-        "Starting Mork server from {} on port {}",
-        mork_path_str, port
-    );
-
     tokio::spawn(async move {
         let mut cmd = tokio::process::Command::new(&temp_path);
-        cmd.env("MORK_SERVER_PORT", port);
+
+        cmd.env("MORK_SERVER_PORT", &port);
+        cmd.env("MORK_SERVER_ADDR", &host);
+
         cmd.kill_on_drop(true);
 
         match cmd.spawn() {
             Ok(mut child) => {
                 println!("Mork server started with PID: {:?}", child.id());
-                if let Err(e) = child.wait().await {
-                    eprintln!("Mork server process failed: {e}");
+                match child.wait().await {
+                    Ok(status) => {
+                        if !status.success() {
+                            eprintln!("Mork server exited unexpectedly with status: {}", status);
+                        } else {
+                            println!("Mork server exited successfully.");
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to wait on Mork server: {e}"),
                 }
             }
             Err(e) => {
@@ -117,7 +252,7 @@ async fn spawn_mork_server(mork_url: &str) {
     env::set_var("METTA_KG_MORK_URL", mork_url);
 }
 
-fn build_rocket(cfg: &Cli) -> Rocket<Build> {
+fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
     dotenv::dotenv().ok();
 
     let mut connection: DbConnection = db::establish_connection();
@@ -125,12 +260,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
         .run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations");
 
-    let api_url = Url::parse(
-        cfg.mettakg_api_url
-            .as_deref()
-            .expect("Missing --mettakg_api_url"),
-    )
-    .expect("Invalid --mettakg_api_url");
+    let api_url = Url::parse(&cfg.mettakg_api_url).expect("Invalid mettakg_api_url");
     let dynamic_origin = format!(
         "{}://{}:{}",
         api_url.scheme(),
@@ -144,7 +274,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
         "https://metta-kg.vercel.app".to_string(),
         "http://127.0.0.1:3000".to_string(),
         "http://127.0.0.1:8000".to_string(),
-        "http://127.0.0.1:8080".to_string(), // For config server
+        "http://127.0.0.1:8080".to_string(),
     ];
     if !origins.contains(&dynamic_origin) {
         origins.push(dynamic_origin);
@@ -164,22 +294,13 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
     .to_cors()
     .unwrap();
 
-    let url = Url::parse(
-        cfg.mettakg_api_url
-            .as_deref()
-            .expect("Missing --mettakg_api_url"),
-    )
-    .expect("Invalid -m mettakg_api_url");
-
-    let host: std::net::IpAddr = url
+    let host: std::net::IpAddr = api_url
         .host_str()
         .unwrap_or("127.0.0.1")
         .parse()
         .expect("Invalid host IP address");
 
-    let port = url.port().unwrap_or(8000);
-
-    println!("MeTTa-KG server starting at {}:{}", host, port);
+    let port = api_url.port().unwrap_or(8000);
 
     let figment = rocket::Config::figment()
         .merge(("address", host))
@@ -213,8 +334,7 @@ fn build_rocket(cfg: &Cli) -> Rocket<Build> {
         .mount("/", routes![index, dist])
 }
 
-pub async fn rocket(cfg: &Cli) -> Rocket<Build> {
-    let mork_url = cfg.mork_server_url.as_ref().unwrap();
-    spawn_mork_server(mork_url).await;
+pub async fn rocket(cfg: &AppConfig) -> Rocket<Build> {
+    spawn_mork_server(&cfg.mork_server_url).await;
     build_rocket(cfg)
 }
