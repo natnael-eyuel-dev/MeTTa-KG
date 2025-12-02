@@ -1,17 +1,18 @@
 use httpmock::prelude::*;
 use httpmock::Regex;
 use metta_kg::rocket;
-use metta_kg::routes::spaces::ExploreInput;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;
 use std::env;
 
-use crate::integrations::common;
+#[path = "common.rs"]
+mod common;
+// use crate::common;
 
 #[tokio::test]
 #[serial]
-async fn test_explore_success() {
+async fn test_clear_success() {
     if !common::is_database_running() {
         eprintln!("Warning: Database not running, skipping test");
         return;
@@ -21,11 +22,11 @@ async fn test_explore_success() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    // Mock explore request
+    // Mock clear request
     server.mock(|when, then| {
         when.method(GET)
-            .path_matches(Regex::new(r"/explore/.*").unwrap());
-        then.status(200).body("(explore result)");
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -39,21 +40,15 @@ async fn test_explore_success() {
         .await
         .expect("valid rocket instance");
 
-    let explore_input = ExploreInput {
-        pattern: "$x".to_string(),
-        token: "some_token".to_string(),
-    };
-
     let response = client
-        .post("/spaces/explore/test/space")
+        .post("/api/spaces/clear/test/space?expr=")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&explore_input)
         .dispatch()
         .await;
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "\"(explore result)\"");
+    assert_eq!(body, "true");
 
     common::teardown_database();
 }
@@ -81,16 +76,10 @@ async fn test_non_existent_namespace() {
         .await
         .expect("valid rocket instance");
 
-    let explore_input = ExploreInput {
-        pattern: "$x".to_string(),
-        token: "some_token".to_string(),
-    };
-
     // Path does not start with /test/
     let response = client
-        .post("/spaces/explore/other/space")
+        .post("/api/spaces/clear/other/space?expr=$x")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&explore_input)
         .dispatch()
         .await;
 
@@ -111,11 +100,11 @@ async fn test_existing_empty_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    // Mock explore request
+    // Mock clear request
     server.mock(|when, then| {
         when.method(GET)
-            .path_matches(Regex::new(r"/explore/.*").unwrap());
-        then.status(200).body("(explore result)");
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -129,21 +118,15 @@ async fn test_existing_empty_namespace() {
         .await
         .expect("valid rocket instance");
 
-    let explore_input = ExploreInput {
-        pattern: "$x".to_string(),
-        token: "some_token".to_string(),
-    };
-
     let response = client
-        .post("/spaces/explore/test/space")
+        .post("/api/spaces/clear/test/space?expr=$x")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&explore_input)
         .dispatch()
         .await;
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "\"(explore result)\"");
+    assert_eq!(body, "true");
 
     common::teardown_database();
 }
@@ -160,11 +143,11 @@ async fn test_non_empty_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    // Mock explore request
+    // Mock clear request
     server.mock(|when, then| {
         when.method(GET)
-            .path_matches(Regex::new(r"/explore/.*").unwrap());
-        then.status(200).body("(explore result)");
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -178,21 +161,15 @@ async fn test_non_empty_namespace() {
         .await
         .expect("valid rocket instance");
 
-    let explore_input = ExploreInput {
-        pattern: "$x".to_string(),
-        token: "some_token".to_string(),
-    };
-
     let response = client
-        .post("/spaces/explore/test/space")
+        .post("/api/spaces/clear/test/space?expr=$x")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&explore_input)
         .dispatch()
         .await;
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "\"(explore result)\"");
+    assert_eq!(body, "true");
 
     common::teardown_database();
 }
@@ -212,8 +189,8 @@ async fn test_different_namespaces() {
 
     server.mock(|when, then| {
         when.method(GET)
-            .path_matches(Regex::new(r"/explore/.*").unwrap());
-        then.status(200).body("(explore result)");
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -227,25 +204,18 @@ async fn test_different_namespaces() {
         .await
         .expect("valid rocket instance");
 
-    let explore_input = ExploreInput {
-        pattern: "$x".to_string(),
-        token: "some_token".to_string(),
-    };
-
-    // Explore in ns1
+    // Clear in ns1
     let response1 = client
-        .post("/spaces/explore/ns1/space")
+        .post("/api/spaces/clear/ns1/space?expr=$x")
         .header(Header::new("authorization", token1.code.clone()))
-        .json(&explore_input)
         .dispatch()
         .await;
     assert_eq!(response1.status(), Status::Ok);
 
-    // Explore in ns2
+    // Clear in ns2
     let response2 = client
-        .post("/spaces/explore/ns2/space")
+        .post("/api/spaces/clear/ns2/space?expr=$x")
         .header(Header::new("authorization", token2.code.clone()))
-        .json(&explore_input)
         .dispatch()
         .await;
     assert_eq!(response2.status(), Status::Ok);
@@ -276,16 +246,10 @@ async fn test_namespace_mismatch() {
         .await
         .expect("valid rocket instance");
 
-    let explore_input = ExploreInput {
-        pattern: "$x".to_string(),
-        token: "some_token".to_string(),
-    };
-
     // Path does not start with /test/
     let response = client
-        .post("/spaces/explore/other/space")
+        .post("/api/spaces/clear/other/space?expr=$x")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&explore_input)
         .dispatch()
         .await;
 

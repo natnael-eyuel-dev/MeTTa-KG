@@ -3,8 +3,6 @@ FROM rust:1.86 AS rust-builder
 
 WORKDIR /mettakg
 
-COPY api api
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     musl-dev \
     g++ \
@@ -20,6 +18,8 @@ ENV OPENSSL_INCLUDE_DIR=/usr/include
 ENV OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu
 
 ENV LIBPQ_STATIC=1
+
+COPY api api
 
 RUN cd api/ && cargo build --release --target x86_64-unknown-linux-musl
 
@@ -44,7 +44,7 @@ FROM python:3.11.7-alpine3.19
 
 WORKDIR /mettakg
 
-COPY --from=rust-builder /mettakg/api/target/x86_64-unknown-linux-musl/release/api /usr/local/bin/
+COPY --from=rust-builder /mettakg/api/target/x86_64-unknown-linux-musl/release/metta-kg /usr/local/bin/
 COPY --from=python-builder /mettakg/venv /mettakg/venv
 COPY --from=python-builder /mettakg/translations /mettakg/translations
 
@@ -52,4 +52,4 @@ COPY Rocket.toml .
 
 RUN mkdir -p static temp
 
-ENTRYPOINT ["api"]
+ENTRYPOINT ["metta-kg"]

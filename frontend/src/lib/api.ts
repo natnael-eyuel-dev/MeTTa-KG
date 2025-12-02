@@ -1,5 +1,11 @@
 import { rootToken } from "./state";
-import { ImportDataResponse, Token, ExploreDetail, Mm2Input } from "./types";
+import {
+  ImportDataResponse,
+  Token,
+  ExploreDetail,
+  Mm2Input,
+  Mm2InputMultiWithNamespace,
+} from "./types";
 import { CSVParserParameters } from "~/types";
 import { quoteFromBytes } from "./utils";
 
@@ -69,25 +75,15 @@ export async function request<T>(
   }
 }
 
-export const transform = (path: string, transformation: Mm2Input) => {
-  const patterns = Array.isArray(transformation.pattern)
-    ? transformation.pattern
-    : [transformation.pattern];
-  const templates = Array.isArray(transformation.template)
-    ? transformation.template
-    : [transformation.template];
-
-  return request<boolean>(`/spaces/transform${path}`, {
+export const transform = (
+  input: Mm2InputMultiWithNamespace
+): Promise<boolean> => {
+  console.log("transform input", input);
+  return request<boolean>("/spaces/transform", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patterns, templates }),
-  })
-    .then((result) => {
-      return result;
-    })
-    .catch((error) => {
-      throw error;
-    });
+    body: JSON.stringify(input),
+  });
 };
 
 export const readSpace = (path: string) => {
@@ -228,7 +224,7 @@ export const uploadTextToSpace = (
 ): Promise<string> => {
   return request<string>(`/spaces/upload${path}`, {
     method: "POST",
-    headers: { "Content-Type": "text/plain" },
+    headers: { "Content-Type": "application/json" },
     body: data,
   });
 };
@@ -330,7 +326,6 @@ export const exploreSpace = (
   if (token instanceof Array) {
     token = Uint8Array.from(token);
   }
-  console.log("exploring: ", path, pattern, token);
   return request<ExploreDetail[]>(`/spaces/explore${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

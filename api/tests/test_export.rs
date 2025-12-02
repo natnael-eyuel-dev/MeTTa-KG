@@ -7,7 +7,9 @@ use rocket::local::asynchronous::Client;
 use serial_test::serial;
 use std::env;
 
-use crate::integrations::common;
+#[path = "common.rs"]
+mod common;
+// use crate::common;
 
 #[tokio::test]
 #[serial]
@@ -45,7 +47,7 @@ async fn test_export_success() {
     };
 
     let response = client
-        .post("/spaces/export/test/space")
+        .post("/api/spaces/export/test/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&export_input)
         .dispatch()
@@ -88,7 +90,7 @@ async fn test_non_existent_namespace() {
 
     // Path does not start with /test/
     let response = client
-        .post("/spaces/export/other/space")
+        .post("/api/spaces/export/other/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&export_input)
         .dispatch()
@@ -135,7 +137,7 @@ async fn test_existing_empty_namespace() {
     };
 
     let response = client
-        .post("/spaces/export/test/space")
+        .post("/api/spaces/export/test/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&export_input)
         .dispatch()
@@ -184,7 +186,7 @@ async fn test_non_empty_namespace() {
     };
 
     let response = client
-        .post("/spaces/export/test/space")
+        .post("/api/spaces/export/test/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&export_input)
         .dispatch()
@@ -234,7 +236,7 @@ async fn test_different_namespaces() {
 
     // Export from ns1
     let response1 = client
-        .post("/spaces/export/ns1/space")
+        .post("/api/spaces/export/ns1/space")
         .header(Header::new("authorization", token1.code.clone()))
         .json(&export_input)
         .dispatch()
@@ -243,7 +245,7 @@ async fn test_different_namespaces() {
 
     // Export from ns2
     let response2 = client
-        .post("/spaces/export/ns2/space")
+        .post("/api/spaces/export/ns2/space")
         .header(Header::new("authorization", token2.code.clone()))
         .json(&export_input)
         .dispatch()
@@ -283,7 +285,7 @@ async fn test_namespace_mismatch() {
 
     // Path does not start with /test/
     let response = client
-        .post("/spaces/export/other/space")
+        .post("/api/spaces/export/other/space")
         .header(Header::new("authorization", token.code.clone()))
         .json(&export_input)
         .dispatch()

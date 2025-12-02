@@ -1,30 +1,33 @@
 use httpmock::prelude::*;
-use httpmock::Regex;
+use metta_kg::mork_api::Mm2Cell;
 use metta_kg::rocket;
+use metta_kg::routes::spaces::Mm2InputMultiWithNamespace;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;
 use std::env;
 
-use crate::integrations::common;
+#[path = "common.rs"]
+mod common;
 
 #[tokio::test]
 #[serial]
-async fn test_import_success() {
+async fn test_transform_success() {
     if !common::is_database_running() {
         eprintln!("Warning: Database not running, skipping test");
         return;
     }
+    // Setup mock server
     let server = MockServer::start();
     common::setup(&server.base_url());
 
+    // Create test token
     let token = common::create_test_token("/test/", true, true);
 
-    // Mock import request
+    // Mock transform request
     server.mock(|when, then| {
-        when.method(GET)
-            .path_matches(Regex::new(r"/import/.*").unwrap());
-        then.status(200).body("Import successful");
+        when.method(POST).path("/transform");
+        then.status(200).body("Transform successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -38,12 +41,21 @@ async fn test_import_success() {
         .await
         .expect("valid rocket instance");
 
+    let mm2_input = Mm2InputMultiWithNamespace {
+        patterns: vec![Mm2Cell::new_pattern(
+            "$x".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/test/space"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($x)".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/test/space"),
+        )],
+    };
+
     let response = client
-        .post(format!(
-            "/spaces/import/test/space?uri={}",
-            urlencoding::encode("http://example.com/data")
-        ))
+        .post("/api/spaces/transform")
         .header(Header::new("authorization", token.code.clone()))
+        .json(&mm2_input)
         .dispatch()
         .await;
 
@@ -77,13 +89,22 @@ async fn test_non_existent_namespace() {
         .await
         .expect("valid rocket instance");
 
+    let mm2_input = Mm2InputMultiWithNamespace {
+        patterns: vec![Mm2Cell::new_pattern(
+            "$x".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/other/space"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($x)".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/other/space"),
+        )],
+    };
+
     // Path does not start with /test/
     let response = client
-        .post(format!(
-            "/spaces/import/other/space?uri={}",
-            urlencoding::encode("http://example.com/data")
-        ))
+        .post("/api/spaces/transform")
         .header(Header::new("authorization", token.code.clone()))
+        .json(&mm2_input)
         .dispatch()
         .await;
 
@@ -104,11 +125,9 @@ async fn test_existing_empty_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    // Mock import request
     server.mock(|when, then| {
-        when.method(GET)
-            .path_matches(Regex::new(r"/import/.*").unwrap());
-        then.status(200).body("Import successful");
+        when.method(POST).path("/transform");
+        then.status(200).body("Transform successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -122,58 +141,21 @@ async fn test_existing_empty_namespace() {
         .await
         .expect("valid rocket instance");
 
-    let response = client
-        .post(format!(
-            "/spaces/import/test/space?uri={}",
-            urlencoding::encode("http://example.com/data")
-        ))
-        .header(Header::new("authorization", token.code.clone()))
-        .dispatch()
-        .await;
-
-    assert_eq!(response.status(), Status::Ok);
-    let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "true");
-
-    common::teardown_database();
-}
-
-#[tokio::test]
-#[serial]
-async fn test_non_empty_namespace() {
-    if !common::is_database_running() {
-        eprintln!("Warning: Database not running, skipping test");
-        return;
-    }
-    let server = MockServer::start();
-    common::setup(&server.base_url());
-
-    let token = common::create_test_token("/test/", true, true);
-
-    // Mock import request
-    server.mock(|when, then| {
-        when.method(GET)
-            .path_matches(Regex::new(r"/import/.*").unwrap());
-        then.status(200).body("Import successful");
-    });
-
-    let config = metta_kg::cli::AppConfig {
-        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
-        mork_server_url: server.base_url(),
-        mettakg_api_url: "http://localhost:8000".to_string(),
+    let mm2_input = Mm2InputMultiWithNamespace {
+        patterns: vec![Mm2Cell::new_pattern(
+            "$x".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/test/space"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($x)".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/test/space"),
+        )],
     };
 
-    // Create client
-    let client = Client::tracked(rocket(&config).await)
-        .await
-        .expect("valid rocket instance");
-
     let response = client
-        .post(format!(
-            "/spaces/import/test/space?uri={}",
-            urlencoding::encode("http://example.com/data")
-        ))
+        .post("/api/spaces/transform")
         .header(Header::new("authorization", token.code.clone()))
+        .json(&mm2_input)
         .dispatch()
         .await;
 
@@ -198,9 +180,8 @@ async fn test_different_namespaces() {
     let token2 = common::create_test_token("/ns2/", true, true);
 
     server.mock(|when, then| {
-        when.method(GET)
-            .path_matches(Regex::new(r"/import/.*").unwrap());
-        then.status(200).body("Import successful");
+        when.method(POST).path("/transform");
+        then.status(200).body("Transform successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -214,24 +195,42 @@ async fn test_different_namespaces() {
         .await
         .expect("valid rocket instance");
 
-    // Import to ns1
+    let mm2_input1 = Mm2InputMultiWithNamespace {
+        patterns: vec![Mm2Cell::new_pattern(
+            "$x".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/ns1/space"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($x)".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/ns1/space"),
+        )],
+    };
+
+    let mm2_input2 = Mm2InputMultiWithNamespace {
+        patterns: vec![Mm2Cell::new_pattern(
+            "$x".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/ns2/space"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($x)".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/ns2/space"),
+        )],
+    };
+
+    // Transform in ns1
     let response1 = client
-        .post(format!(
-            "/spaces/import/ns1/space?uri={}",
-            urlencoding::encode("http://example.com/data")
-        ))
+        .post("/api/spaces/transform")
         .header(Header::new("authorization", token1.code.clone()))
+        .json(&mm2_input1)
         .dispatch()
         .await;
     assert_eq!(response1.status(), Status::Ok);
 
-    // Import to ns2
+    // Transform in ns2
     let response2 = client
-        .post(format!(
-            "/spaces/import/ns2/space?uri={}",
-            urlencoding::encode("http://example.com/data")
-        ))
+        .post("/api/spaces/transform")
         .header(Header::new("authorization", token2.code.clone()))
+        .json(&mm2_input2)
         .dispatch()
         .await;
     assert_eq!(response2.status(), Status::Ok);
@@ -262,13 +261,22 @@ async fn test_namespace_mismatch() {
         .await
         .expect("valid rocket instance");
 
+    let mm2_input = Mm2InputMultiWithNamespace {
+        patterns: vec![Mm2Cell::new_pattern(
+            "$x".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/other/space"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($x)".to_string(),
+            metta_kg::mork_api::Namespace::from_path_string("/other/space"),
+        )],
+    };
+
     // Path does not start with /test/
     let response = client
-        .post(format!(
-            "/spaces/import/other/space?uri={}",
-            urlencoding::encode("http://example.com/data")
-        ))
+        .post("/api/spaces/transform")
         .header(Header::new("authorization", token.code.clone()))
+        .json(&mm2_input)
         .dispatch()
         .await;
 

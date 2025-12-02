@@ -54,3 +54,4 @@ integration-tests = []
 
 [profile.dist]
 inherits = "release"
+all-features = ["integration-tests"]

@@ -1,31 +1,32 @@
 use httpmock::prelude::*;
+use httpmock::Regex;
 use metta_kg::rocket;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;
 use std::env;
 
-use crate::integrations::common;
-use metta_kg::routes::spaces::Mm2InputMulti;
+#[path = "common.rs"]
+mod common;
+// use crate::common;
 
 #[tokio::test]
 #[serial]
-async fn test_transform_success() {
+async fn test_upload_success() {
     if !common::is_database_running() {
         eprintln!("Warning: Database not running, skipping test");
         return;
     }
-    // Setup mock server
     let server = MockServer::start();
     common::setup(&server.base_url());
 
-    // Create test token
     let token = common::create_test_token("/test/", true, true);
 
-    // Mock transform request
+    // Mock upload request
     server.mock(|when, then| {
-        when.method(POST).path("/transform");
-        then.status(200).body("Transform successful");
+        when.method(POST)
+            .path_matches(Regex::new(r"/upload/.*").unwrap());
+        then.status(200).body("Upload successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -39,21 +40,16 @@ async fn test_transform_success() {
         .await
         .expect("valid rocket instance");
 
-    let mm2_input = Mm2InputMulti {
-        patterns: vec!["$x".to_string()],
-        templates: vec!["($x)".to_string()],
-    };
-
     let response = client
-        .post("/spaces/transform/test/space")
+        .post("/api/spaces/upload/test/space")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&mm2_input)
+        .body("(test atom)")
         .dispatch()
         .await;
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "true");
+    assert_eq!(body, "\"Upload successful\"");
 
     common::teardown_database();
 }
@@ -81,16 +77,11 @@ async fn test_non_existent_namespace() {
         .await
         .expect("valid rocket instance");
 
-    let mm2_input = Mm2InputMulti {
-        patterns: vec!["$x".to_string()],
-        templates: vec!["($x)".to_string()],
-    };
-
     // Path does not start with /test/
     let response = client
-        .post("/spaces/transform/other/space")
+        .post("/api/spaces/upload/other/space")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&mm2_input)
+        .body("(test atom)")
         .dispatch()
         .await;
 
@@ -111,9 +102,11 @@ async fn test_existing_empty_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
+    // Mock upload request
     server.mock(|when, then| {
-        when.method(POST).path("/transform");
-        then.status(200).body("Transform successful");
+        when.method(POST)
+            .path_matches(Regex::new(r"/upload/.*").unwrap());
+        then.status(200).body("Upload successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -127,21 +120,60 @@ async fn test_existing_empty_namespace() {
         .await
         .expect("valid rocket instance");
 
-    let mm2_input = Mm2InputMulti {
-        patterns: vec!["$x".to_string()],
-        templates: vec!["($x)".to_string()],
-    };
-
     let response = client
-        .post("/spaces/transform/test/space")
+        .post("/api/spaces/upload/test/space")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&mm2_input)
+        .body("(test atom)")
         .dispatch()
         .await;
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
-    assert_eq!(body, "true");
+    assert_eq!(body, "\"Upload successful\"");
+
+    common::teardown_database();
+}
+
+#[tokio::test]
+#[serial]
+async fn test_non_empty_namespace() {
+    if !common::is_database_running() {
+        eprintln!("Warning: Database not running, skipping test");
+        return;
+    }
+    let server = MockServer::start();
+    common::setup(&server.base_url());
+
+    let token = common::create_test_token("/test/", true, true);
+
+    // Mock upload request
+    server.mock(|when, then| {
+        when.method(POST)
+            .path_matches(Regex::new(r"/upload/.*").unwrap());
+        then.status(200).body("Upload successful");
+    });
+
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    // Create client
+    let client = Client::tracked(rocket(&config).await)
+        .await
+        .expect("valid rocket instance");
+
+    let response = client
+        .post("/api/spaces/upload/test/space")
+        .header(Header::new("authorization", token.code.clone()))
+        .body("(test atom)")
+        .dispatch()
+        .await;
+
+    assert_eq!(response.status(), Status::Ok);
+    let body = response.into_string().await.expect("response body");
+    assert_eq!(body, "\"Upload successful\"");
 
     common::teardown_database();
 }
@@ -160,8 +192,9 @@ async fn test_different_namespaces() {
     let token2 = common::create_test_token("/ns2/", true, true);
 
     server.mock(|when, then| {
-        when.method(POST).path("/transform");
-        then.status(200).body("Transform successful");
+        when.method(POST)
+            .path_matches(Regex::new(r"/upload/.*").unwrap());
+        then.status(200).body("Upload successful");
     });
 
     let config = metta_kg::cli::AppConfig {
@@ -175,25 +208,20 @@ async fn test_different_namespaces() {
         .await
         .expect("valid rocket instance");
 
-    let mm2_input = Mm2InputMulti {
-        patterns: vec!["$x".to_string()],
-        templates: vec!["($x)".to_string()],
-    };
-
-    // Transform in ns1
+    // Upload to ns1
     let response1 = client
-        .post("/spaces/transform/ns1/space")
+        .post("/api/spaces/upload/ns1/space")
         .header(Header::new("authorization", token1.code.clone()))
-        .json(&mm2_input)
+        .body("(test atom)")
         .dispatch()
         .await;
     assert_eq!(response1.status(), Status::Ok);
 
-    // Transform in ns2
+    // Upload to ns2
     let response2 = client
-        .post("/spaces/transform/ns2/space")
+        .post("/api/spaces/upload/ns2/space")
         .header(Header::new("authorization", token2.code.clone()))
-        .json(&mm2_input)
+        .body("(test atom)")
         .dispatch()
         .await;
     assert_eq!(response2.status(), Status::Ok);
@@ -224,16 +252,11 @@ async fn test_namespace_mismatch() {
         .await
         .expect("valid rocket instance");
 
-    let mm2_input = Mm2InputMulti {
-        patterns: vec!["$x".to_string()],
-        templates: vec!["($x)".to_string()],
-    };
-
     // Path does not start with /test/
     let response = client
-        .post("/spaces/transform/other/space")
+        .post("/api/spaces/upload/other/space")
         .header(Header::new("authorization", token.code.clone()))
-        .json(&mm2_input)
+        .body("(test atom)")
         .dispatch()
         .await;
 

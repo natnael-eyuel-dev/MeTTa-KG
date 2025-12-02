@@ -15,7 +15,7 @@ This README is WIP and is subject to change.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/MeTTa-KG.git
+   git clone https://github.com/arist76/MeTTa-KG.git
    cd MeTTa-KG
    ```
 
