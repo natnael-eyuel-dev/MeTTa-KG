@@ -43,11 +43,12 @@ pub const MORK_BYTES: &[u8] = include_bytes!(env!("MORK_BINARY_PATH"));
 #[folder = "ui-dist/"]
 pub struct UiAssets;
 
+struct ConfiguredApiUrl(String);
+
 #[derive(rocket::FromForm)]
 pub struct SetupForm {
     pub database_url: String,
     pub mork_server_url: String,
-    pub mettakg_api_url: String,
 }
 
 #[get("/")]
@@ -106,6 +107,7 @@ fn test_connection(url: &str) -> Result<(), String> {
 async fn submit_setup(
     form: Form<SetupForm>,
     tx: &State<Sender<AppConfig>>,
+    api_url: &State<ConfiguredApiUrl>,
     shutdown: Shutdown,
 ) -> Result<(), status::BadRequest<String>> {
     if let Err(e) = test_connection(&form.database_url) {
@@ -119,7 +121,7 @@ async fn submit_setup(
     let config = AppConfig {
         database_url: form.database_url.clone(),
         mork_server_url: form.mork_server_url.clone(),
-        mettakg_api_url: form.mettakg_api_url.clone(),
+        mettakg_api_url: api_url.0.clone(),
     };
 
     if (tx.send(config).await).is_err() {
@@ -135,6 +137,33 @@ async fn submit_setup(
 #[derive(serde::Serialize)]
 struct BuildInfo {
     db_type: &'static str,
+    port_8001_process: Option<String>,
+}
+
+fn get_process_on_port_8001() -> Option<String> {
+    #[cfg(unix)]
+    {
+        use std::process::Command;
+        let output = Command::new("lsof")
+            .args(&["-i", ":8001", "-sTCP:LISTEN", "-F", "c"])
+            .output()
+            .ok()?;
+            println!("lsof output: {:?}", output);
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if line.starts_with('c') {
+                    return Some(line[1..].to_string());
+                }
+            }
+        }
+    }
+    
+    if std::net::TcpListener::bind("127.0.0.1:8001").is_err() {
+        return Some("Unknown (Port in use)".to_string());
+    }
+
+    None
 }
 
 #[get("/build-info")]
@@ -144,11 +173,17 @@ fn build_info() -> rocket::serde::json::Json<BuildInfo> {
     } else {
         "postgres"
     };
-    rocket::serde::json::Json(BuildInfo { db_type })
+    
+    let port_8001_process = get_process_on_port_8001();
+
+    rocket::serde::json::Json(BuildInfo { 
+        db_type,
+        port_8001_process
+    })
 }
 
 pub async fn launch_setup_server(preferred_url: Option<String>) -> AppConfig {
-    let (address, port) = if let Some(url_str) = preferred_url {
+    let (address, port, full_url) = if let Some(url_str) = preferred_url {
         let url_str = if !url_str.contains("://") {
             format!("http://{}", url_str)
         } else {
@@ -159,11 +194,20 @@ pub async fn launch_setup_server(preferred_url: Option<String>) -> AppConfig {
             Ok(url) => (
                 url.host_str().unwrap_or("127.0.0.1").to_string(),
                 url.port().unwrap_or(8000),
+                url_str,
             ),
-            Err(_) => ("127.0.0.1".to_string(), 8000),
+            Err(_) => (
+                "127.0.0.1".to_string(),
+                8000,
+                "http://127.0.0.1:8000".to_string(),
+            ),
         }
     } else {
-        ("127.0.0.1".to_string(), 8000)
+        (
+            "127.0.0.1".to_string(),
+            8000,
+            "http://127.0.0.1:8000".to_string(),
+        )
     };
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<AppConfig>(1);
@@ -176,6 +220,7 @@ pub async fn launch_setup_server(preferred_url: Option<String>) -> AppConfig {
     let server = rocket::custom(figment)
         .mount("/", routes![index, dist, submit_setup, build_info])
         .manage(tx)
+        .manage(ConfiguredApiUrl(full_url))
         .ignite()
         .await
         .expect("Failed to ignite setup server");
@@ -189,6 +234,18 @@ async fn spawn_mork_server(mork_url: &str) {
     let url = url::Url::parse(mork_url).expect("Invalid Mork server URL");
     let port = url.port().expect("URL must include a port").to_string();
     let host = url.host_str().expect("URL must include a host").to_string();
+
+    let is_port_available = if host == "127.0.0.1" || host == "localhost" {
+        std::net::TcpListener::bind(format!("{}:{}", host, port)).is_ok()
+    } else {
+        false 
+    };
+
+    if !is_port_available {
+        println!("Port {} is in use or host is remote. Skipping Mork spawn and connecting to existing instance at {}.", port, mork_url);
+        env::set_var("METTA_KG_MORK_URL", mork_url);
+        return;
+    }
 
     let temp_file = Builder::new()
         .prefix("mork_server_")
