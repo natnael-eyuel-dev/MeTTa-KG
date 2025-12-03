@@ -145,20 +145,19 @@ fn get_process_on_port_8001() -> Option<String> {
     {
         use std::process::Command;
         let output = Command::new("lsof")
-            .args(&["-i", ":8001", "-sTCP:LISTEN", "-F", "c"])
+            .args(["-i", ":8001", "-sTCP:LISTEN", "-F", "c"])
             .output()
             .ok()?;
-            println!("lsof output: {:?}", output);
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
-                if line.starts_with('c') {
-                    return Some(line[1..].to_string());
+                if let Some(stripped) = line.strip_prefix('c') {
+                    return Some(stripped.to_string());
                 }
             }
         }
     }
-    
+
     if std::net::TcpListener::bind("127.0.0.1:8001").is_err() {
         return Some("Unknown (Port in use)".to_string());
     }
@@ -173,12 +172,12 @@ fn build_info() -> rocket::serde::json::Json<BuildInfo> {
     } else {
         "postgres"
     };
-    
+
     let port_8001_process = get_process_on_port_8001();
 
-    rocket::serde::json::Json(BuildInfo { 
+    rocket::serde::json::Json(BuildInfo {
         db_type,
-        port_8001_process
+        port_8001_process,
     })
 }
 
@@ -238,7 +237,7 @@ async fn spawn_mork_server(mork_url: &str) {
     let is_port_available = if host == "127.0.0.1" || host == "localhost" {
         std::net::TcpListener::bind(format!("{}:{}", host, port)).is_ok()
     } else {
-        false 
+        false
     };
 
     if !is_port_available {
@@ -351,11 +350,12 @@ fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
     .to_cors()
     .unwrap();
 
-    let host: std::net::IpAddr = api_url
-        .host_str()
-        .unwrap_or("127.0.0.1")
-        .parse()
-        .expect("Invalid host IP address");
+    let host_str = api_url.host_str().unwrap_or("127.0.0.1");
+    let host: std::net::IpAddr = if host_str == "localhost" {
+        "127.0.0.1".parse().unwrap()
+    } else {
+        host_str.parse().expect("Invalid host IP address")
+    };
 
     let port = api_url.port().unwrap_or(8000);
 
