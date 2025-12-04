@@ -75,7 +75,7 @@ const TransformPage: Component = () => {
   const updateTemplate = (
     id: string,
     field: "namespace" | "value",
-    value: string[] | string
+    value: string | string[]
   ) => {
     setState(
       "templates",
