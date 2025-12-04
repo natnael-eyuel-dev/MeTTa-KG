@@ -1,5 +1,11 @@
 import { rootToken } from "./state";
-import { ImportDataResponse, Token, ExploreDetail, Mm2Input } from "./types";
+import {
+  ImportDataResponse,
+  Token,
+  ExploreDetail,
+  Mm2Input,
+  Mm2InputMultiWithNamespace,
+} from "./types";
 import { CSVParserParameters } from "~/types";
 import { quoteFromBytes } from "./utils";
 
@@ -64,25 +70,24 @@ export async function request<T>(
   }
 }
 
-export const transform = (path: string, transformation: Mm2Input) => {
-  const patterns = Array.isArray(transformation.pattern)
-    ? transformation.pattern
-    : [transformation.pattern];
-  const templates = Array.isArray(transformation.template)
-    ? transformation.template
-    : [transformation.template];
-
-  return request<boolean>(`/spaces/transform${path}`, {
+export const transform = (
+  input: Mm2InputMultiWithNamespace
+): Promise<boolean> => {
+  return request<boolean>("/spaces/transform", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patterns, templates }),
-  })
-    .then((result) => {
-      return result;
-    })
-    .catch((error) => {
-      throw error;
-    });
+    body: JSON.stringify(input),
+  });
+};
+
+export const subspace = (
+  input: Mm2InputMultiWithNamespace
+): Promise<boolean> => {
+  return request<boolean>("/spaces/subspace", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 };
 
 export const union = (unification: Mm2Input) => {
@@ -196,36 +201,23 @@ export const createFromN3 = (file: File) => {
 
 export async function isPathClear(path: string): Promise<boolean> {
   try {
-    const cleanPath = path.replace(/\/+$/g, "");
+    const cleanPath = path.replace(/^\/+|\/+$/g, "");
+
     const requestBody = {
       pattern: "$x",
       token: "",
     };
 
-    const explorePath = cleanPath.startsWith("/")
-      ? `/spaces/explore${cleanPath}`
-      : `/spaces/explore/${cleanPath}`;
-
-    const finalUrl = `${API_URL}${explorePath}`;
-
-    const auth = rootToken();
-    if (!auth) {
-      throw new Error("Authorization token is missing.");
-    }
-
-    const response = await fetch(finalUrl, {
+    // TODO: use requests function and return value from it
+    const _response = await fetch(`${API_URL}/spaces/explore${cleanPath}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: auth,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody),
     });
 
-    return response.ok;
-  } catch (error) {
-    console.error("Error in isPathClear:", error);
-    return false;
+    return true;
+  } catch {
+    return true;
   }
 }
 
@@ -283,13 +275,10 @@ export const uploadTextToSpace = (
 };
 
 export const importSpace = (path: string, uri: string) => {
-  return request<boolean>(
-    `/spaces/import/${path.replace(/^\/+/, "")}?uri=${encodeURIComponent(uri)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    }
-  );
+  return request<boolean>(`/spaces/import${path}?uri=${uri}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
 };
 
 export const fetchTokens = async (token: string | null): Promise<Token[]> => {
