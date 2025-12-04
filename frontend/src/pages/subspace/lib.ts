@@ -1,9 +1,8 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
-import { isPathClear } from "~/lib/api";
+import { subspace, isPathClear } from "~/lib/api";
+import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
 import { refreshSpace } from "../load/lib";
-import { rootToken } from "~/lib/state";
-import { API_URL } from "~/lib/api";
 
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [isPolling, setIsPolling] = createSignal(false);
@@ -49,24 +48,26 @@ export const formatNamespace = (namespace: string): string => {
   return formattedNamespace;
 };
 
-export const executeSubspace = async (input: {
-  source: string[];
-  target: string[];
-}) => {
-  if (!input.source[0] || !input.source[1] || !input.target[0]) {
+export const executeSubspace = async (
+  patterns: Item[],
+  templates: Item[],
+  spacePath: string
+) => {
+  if (
+    !patterns.some((p) => p.value.trim()) ||
+    !templates.some((t) => t.value.trim())
+  ) {
     showToast({
       title: "Error",
       description: "Please fill all required fields.",
       variant: "destructive",
     });
-    return false;
   }
 
   setIsLoading(true);
   stopPolling();
 
   try {
-    const spacePath = formatNamespace(input.target[0]);
     if (!(await isPathClear(spacePath))) {
       showToast({
         title: "Space Busy",
@@ -77,28 +78,26 @@ export const executeSubspace = async (input: {
       return false;
     }
 
-    const response = await fetch(`${API_URL}/spaces/subspace`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: rootToken() || "",
-      },
-      body: JSON.stringify(input),
-    });
+    const input: Mm2InputMultiWithNamespace = {
+      patterns: patterns.map((p) => ({
+        kind: "pattern" as const,
+        value: `(${p.value} $x)`,
+        namespace: p.namespace.filter((n) => n !== "" && n !== "/"),
+      })),
+      templates: templates.map((t) => ({
+        kind: "template" as const,
+        value: t.value,
+        namespace: t.namespace.filter((n) => n !== "" && n !== "/"),
+      })),
+    };
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Subspace operation failed");
-    }
-
-    const result = await response.json();
-    if (result === true) {
+    const success = await subspace(input);
+    if (success) {
       showToast({
         title: "Subspace Operation Initiated",
         description: "Waiting for results...",
       });
       startPolling(spacePath);
-      return true;
     } else {
       showToast({
         title: "Subspace Operation Failed",

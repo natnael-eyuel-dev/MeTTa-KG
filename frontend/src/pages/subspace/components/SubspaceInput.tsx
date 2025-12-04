@@ -21,7 +21,7 @@ interface Item {
 }
 
 interface SubspaceInputProps {
-  type: "source" | "target";
+  type: "patterns" | "templates";
   items: Item[];
   addItem: () => void;
   removeItem: (id: string) => void;
@@ -37,13 +37,13 @@ interface SubspaceInputProps {
 }
 
 export function SubspaceInput(props: SubspaceInputProps) {
-  const title = props.type === "source" ? "Pattern" : "Template";
+  const title = props.type === "patterns" ? "Pattern" : "Template";
   const description =
-    props.type === "source"
-      ? "Define the source namespace and prefix pattern"
-      : "Define the target namespace for the subspace";
+    props.type === "patterns"
+      ? "Define the patterns namespace and prefix pattern"
+      : "Define the templates namespace for the subspace";
 
-  const showValueField = props.type === "source";
+  const showValueField = props.type === "patterns";
 
   return (
     <Card class="border-l-4" style="border-left-color: rgb(34 197 94);">
@@ -84,8 +84,8 @@ export function SubspaceInput(props: SubspaceInputProps) {
                           )
                         }
                         placeholder={
-                          props.type === "source"
-                            ? "Prefix pattern (e.g. $y)"
+                          props.type === "patterns"
+                            ? "Insert Prefix to match: enter only prefix"
                             : "Template value"
                         }
                         class="text-sm font-mono resize-none"

@@ -12,7 +12,7 @@ import {
 import { executeSubspace, isLoading, isPolling, stopPolling } from "./lib";
 import { SubspaceInput as SubspaceInputComponent } from "./components/SubspaceInput";
 import { Copy, Check } from "lucide-solid";
-import { rootToken, tokenRootNamespace } from "~/lib/state";
+import { formatedNamespace, rootToken, tokenRootNamespace } from "~/lib/state";
 import { getAllTokens } from "~/lib/api";
 
 interface Item {
@@ -23,8 +23,8 @@ interface Item {
 
 const SubspacePage: Component = () => {
   const [state, setState] = createStore({
-    sourcePatterns: [{ id: createUniqueId(), namespace: [""], value: "" }],
-    targetTemplates: [{ id: createUniqueId(), namespace: [""], value: "" }],
+    patterns: [{ id: createUniqueId(), namespace: [""], value: "" }],
+    templates: [{ id: createUniqueId(), namespace: [""], value: "$x" }],
     copied: false,
   });
 
@@ -45,6 +45,14 @@ const SubspacePage: Component = () => {
     sourcePatterns: Item[],
     targetTemplates: Item[]
   ) => {
+    const filterSlash = (ns: string[]): string[] => {
+      if (ns.length > 1) {
+        if (ns[0] === "/" || ns[0] === "") {
+          return ns.slice(1);
+        }
+      }
+      return ns;
+    };
     const sourcePattern = sourcePatterns[0] || {
       namespace: [""],
       value: "",
@@ -54,19 +62,18 @@ const SubspacePage: Component = () => {
       value: "",
     };
 
-    const filteredSourceNs = sourcePattern.namespace.filter((ns) => ns);
-    const prefix = sourcePattern.value || "";
-    const filteredTargetNs = targetTemplate.namespace.filter((ns) => ns);
-
     const sourcePath =
-      filteredSourceNs.length > 0
-        ? buildNestedPath(filteredSourceNs, `(${prefix} $x)`)
-        : `( (${prefix} $x))`;
+      sourcePattern.namespace.length > 0
+        ? buildNestedPath(
+            filterSlash(sourcePattern.namespace),
+            `(${sourcePattern.value} $x)`
+          )
+        : `(${sourcePattern.value} $x)`;
 
     const targetPath =
-      filteredTargetNs.length > 0
-        ? buildNestedPath(filteredTargetNs, "$x")
-        : "( $x)";
+      targetTemplate.namespace.length > 0
+        ? buildNestedPath(filterSlash(targetTemplate.namespace), "$x")
+        : "$x";
 
     return `(transform
     (, ${sourcePath})
@@ -75,32 +82,18 @@ const SubspacePage: Component = () => {
   };
 
   const handleSubspace = async () => {
-    const sourcePattern = state.sourcePatterns[0];
-    const targetTemplate = state.targetTemplates[0];
-
-    if (!sourcePattern || !targetTemplate) return;
-
-    const sourceNs = sourcePattern.namespace.join("/");
-    const prefix = sourcePattern.value;
-    const targetNs = targetTemplate.namespace.join("/");
-
-    if (!sourceNs || !prefix || !targetNs) return;
-
-    await executeSubspace({
-      source: [sourceNs, prefix],
-      target: [targetNs],
-    });
+    executeSubspace(state.patterns, state.templates, formatedNamespace());
   };
 
   const addSourcePattern = () => {
-    setState("sourcePatterns", (prev) => [
+    setState("patterns", (prev) => [
       ...prev,
       { id: createUniqueId(), namespace: [""], value: "" },
     ]);
   };
 
   const removeSourcePattern = (id: string) => {
-    setState("sourcePatterns", (prev) => prev.filter((p) => p.id !== id));
+    setState("patterns", (prev) => prev.filter((p) => p.id !== id));
   };
 
   const updateSourcePattern = (
@@ -109,7 +102,7 @@ const SubspacePage: Component = () => {
     value: string | string[]
   ) => {
     setState(
-      "sourcePatterns",
+      "patterns",
       produce((patterns) => {
         const item = patterns.find((p) => p.id === id);
         if (item) {
@@ -124,14 +117,14 @@ const SubspacePage: Component = () => {
   };
 
   const addTargetTemplate = () => {
-    setState("targetTemplates", (prev) => [
+    setState("templates", (prev) => [
       ...prev,
       { id: createUniqueId(), namespace: [""], value: "" },
     ]);
   };
 
   const removeTargetTemplate = (id: string) => {
-    setState("targetTemplates", (prev) => prev.filter((t) => t.id !== id));
+    setState("templates", (prev) => prev.filter((t) => t.id !== id));
   };
 
   const updateTargetTemplate = (
@@ -140,7 +133,7 @@ const SubspacePage: Component = () => {
     value: string | string[]
   ) => {
     setState(
-      "targetTemplates",
+      "templates",
       produce((templates) => {
         const item = templates.find((t) => t.id === id);
         if (item) {
@@ -155,8 +148,8 @@ const SubspacePage: Component = () => {
   };
 
   const canExecute = () => {
-    const sourcePattern = state.sourcePatterns[0];
-    const targetTemplate = state.targetTemplates[0];
+    const sourcePattern = state.patterns[0];
+    const targetTemplate = state.templates[0];
 
     return (
       sourcePattern &&
@@ -168,10 +161,7 @@ const SubspacePage: Component = () => {
   };
 
   const copyExpression = () => {
-    const sExpr = buildSubspaceSExpr(
-      state.sourcePatterns,
-      state.targetTemplates
-    );
+    const sExpr = buildSubspaceSExpr(state.patterns, state.templates);
     navigator.clipboard.writeText(sExpr);
     setState("copied", true);
     setTimeout(() => setState("copied", false), 2000);
@@ -188,24 +178,24 @@ const SubspacePage: Component = () => {
             {/* Builder - 2/3 */}
             <div class="lg:col-span-2 space-y-6">
               <SubspaceInputComponent
-                type="source"
-                items={state.sourcePatterns}
+                type="patterns"
+                items={state.patterns}
                 addItem={addSourcePattern}
                 removeItem={removeSourcePattern}
                 updateItem={updateSourcePattern}
                 accentColor="green-500"
-                rootToken={Boolean(rootToken())}
+                rootToken={rootToken()}
                 tokenRootNamespace={tokenRootNamespace}
                 getAllTokens={getAllTokens}
               />
               <SubspaceInputComponent
-                type="target"
-                items={state.targetTemplates}
+                type="templates"
+                items={state.templates}
                 addItem={addTargetTemplate}
                 removeItem={removeTargetTemplate}
                 updateItem={updateTargetTemplate}
                 accentColor="green-500"
-                rootToken={Boolean(rootToken())}
+                rootToken={rootToken()}
                 tokenRootNamespace={tokenRootNamespace}
                 getAllTokens={getAllTokens}
               />
@@ -221,10 +211,7 @@ const SubspacePage: Component = () => {
                 </CardHeader>
                 <CardContent>
                   <pre class="text-sm font-mono bg-muted p-3 rounded overflow-auto">
-                    {buildSubspaceSExpr(
-                      state.sourcePatterns,
-                      state.targetTemplates
-                    )}
+                    {buildSubspaceSExpr(state.patterns, state.templates)}
                   </pre>
                   <Button
                     variant="default"
