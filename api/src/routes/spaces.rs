@@ -1,3 +1,4 @@
+use rocket::futures::future::join_all;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::tokio::io::AsyncReadExt;
@@ -10,8 +11,8 @@ use std::path::PathBuf;
 
 use crate::model::Token;
 use crate::mork_api::{
-    ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, MorkApiClient,
-    Namespace, Pattern, ReadRequest, Request, Template, TransformDetails, TransformRequest,
+    ClearRequest, ExploreRequest, ExportFormat, ExportRequest, ImportRequest, Mm2Cell,
+    MorkApiClient, Namespace, ReadRequest, Request, TransformDetails, TransformRequest,
     UploadRequest,
 };
 
@@ -51,19 +52,25 @@ pub struct Mm2InputMulti {
 
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct Mm2InputMultiWithNamespace {
-    pub patterns: Vec<Pattern>,
-    pub templates: Vec<Template>,
+    pub patterns: Vec<Mm2Cell>,
+    pub templates: Vec<Mm2Cell>,
 }
 
 impl SourceTargetPermissions for Mm2InputMultiWithNamespace {
     type Ns = Namespace;
 
     fn source(&self) -> Vec<Self::Ns> {
-        self.patterns.iter().map(|p| p.namespace.clone()).collect()
+        self.patterns
+            .iter()
+            .map(|p| p.namespace().clone())
+            .collect()
     }
 
     fn target(&self) -> Vec<Self::Ns> {
-        self.templates.iter().map(|t| t.namespace.clone()).collect()
+        self.templates
+            .iter()
+            .map(|t| t.namespace().clone())
+            .collect()
     }
 }
 
@@ -115,12 +122,14 @@ pub async fn read(
 
     let mork_api_client = MorkApiClient::new();
     let transform_input = TransformDetails::new()
-        .patterns(vec![Pattern::default()
-            .pattern(mm2.patterns.first().cloned().unwrap_or("$x".to_string()))
-            .namespace(path.to_path_buf())])
-        .templates(vec![Template::default()
-            .template(mm2.templates.first().cloned().unwrap_or("$x".to_string()))
-            .namespace(path.to_path_buf())]);
+        .patterns(vec![Mm2Cell::new_pattern(
+            mm2.patterns.first().cloned().unwrap_or("$x".to_string()),
+            Namespace::from(path.to_path_buf()),
+        )])
+        .templates(vec![Mm2Cell::new_template(
+            mm2.templates.first().cloned().unwrap_or("$x".to_string()),
+            Namespace::from(path.to_path_buf()),
+        )]);
     let request = ReadRequest::new().transform_input(transform_input);
 
     let response = mork_api_client.dispatch(request).await.map(Json);
@@ -172,13 +181,8 @@ pub async fn upload(
 }
 
 /// Imports data from `<uri>` into the `<path..>` space. Exectes mm2 on the imported data.
-#[post("/spaces/import/<path..>?<uri>", data = "<template>")]
-pub async fn import(
-    token: Token,
-    path: PathBuf,
-    uri: String,
-    template: Option<String>,
-) -> Result<Json<bool>, Status> {
+#[post("/spaces/import/<path..>?<uri>")]
+pub async fn import(token: Token, path: PathBuf, uri: String) -> Result<Json<bool>, Status> {
     if !path.starts_with(token.namespace.strip_prefix("/").unwrap()) || !token.permission_write {
         return Err(Status::Unauthorized);
     }
@@ -189,9 +193,7 @@ pub async fn import(
     }
 
     let mork_api_client = MorkApiClient::new();
-    let template = Template::default()
-        .namespace(path)
-        .template(template.unwrap_or("$x".to_string()));
+    let template = Mm2Cell::new_template("$x".to_string(), Namespace::from(path));
     let request = ImportRequest::new().to(template).uri(uri);
 
     match mork_api_client.dispatch(request).await {
@@ -307,54 +309,28 @@ pub async fn transform(
 /// source[1]: prefix
 /// target[0]: target namespace
 #[post("/spaces/subspace", data = "<input>")]
-pub async fn subspace(token: Token, input: Json<SetOperationInput>) -> Result<Json<bool>, Status> {
+pub async fn subspace(
+    token: Token,
+    input: Json<Mm2InputMultiWithNamespace>,
+) -> Result<Json<bool>, Status> {
     let input = input.into_inner();
-    let token_namespace = token.namespace.strip_prefix("/").unwrap_or("");
 
-    if input.source.len() < 2 || input.target.is_empty() {
+    if input.patterns.len() != 1 || input.templates.len() != 1 {
         return Err(Status::BadRequest);
     }
 
-    let source_namespace = input.source[0].trim_start_matches('/').to_string();
-    let prefix = input.source[1].trim().to_string();
-    let target_namespace = input.target[0].trim_start_matches('/').to_string();
-
-    let token_namespace = token_namespace.trim_start_matches('/');
-    if !source_namespace.starts_with(token_namespace)
-        || !target_namespace.starts_with(token_namespace)
-    {
+    if !input.clone().source_target_permissions(token) {
         return Err(Status::Unauthorized);
     }
-
-    if prefix.is_empty() {
-        return Err(Status::BadRequest);
-    }
-
-    if !token.permission_read || !token.permission_write {
-        return Err(Status::Unauthorized);
-    }
-
-    let source_label = source_namespace
-        .split('/')
-        .next()
-        .unwrap_or(source_namespace.as_str());
-    let pattern_str = format!("({} ({} $x))", source_label, prefix);
-    let template_str = "$x".to_string();
-    let pattern = Pattern::default()
-        .pattern(pattern_str.clone())
-        .namespace(source_namespace.clone().into());
-    let template = Template::default()
-        .template(template_str.clone())
-        .namespace(target_namespace.clone().into());
 
     let mork_api_client = MorkApiClient::new();
-
     let request = TransformRequest::new().transform_input(
         TransformDetails::new()
-            .patterns(vec![pattern.clone()])
-            .templates(vec![template.clone()]),
+            .patterns(input.clone().patterns)
+            .templates(input.templates),
     );
 
+    // TODO: use server sent events instead
     match mork_api_client.dispatch(request).await {
         Ok(_) => Ok(Json(true)),
         Err(e) => Err(e),
@@ -390,6 +366,40 @@ pub async fn composition(
         Ok(_) => Ok(Json(true)),
         Err(e) => Err(e),
     }
+}
+
+#[post("/spaces/union", data = "<operation_input>")]
+pub async fn union(
+    token: Token,
+    operation_input: Json<SetOperationInput>,
+) -> Result<Json<bool>, Status> {
+    if !operation_input.source_target_permissions(token) {
+        return Err(Status::Unauthorized);
+    }
+
+    // create a vector of queries
+    let transform_inputs = union_transform(operation_input.into_inner())?;
+
+    let futures = transform_inputs
+        .iter()
+        .map(async |transform_input| {
+            let request = TransformRequest::new().transform_input(transform_input.clone());
+            let mork_api_client = MorkApiClient::new();
+
+            mork_api_client.dispatch(request).await
+        })
+        .collect::<Vec<_>>();
+
+    let results = join_all(futures).await;
+
+    // Check if any requests failed
+    for result in results {
+        if let Err(e) = result {
+            Err(e)?
+        }
+    }
+
+    Ok(Json(true))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -428,20 +438,46 @@ fn composition_transform(input: SetOperationInput) -> Result<TransformDetails, S
             template.push(c);
             template.push(' ');
 
-            Pattern::default()
-                .namespace(PathBuf::from(source_ns))
-                .pattern(format!("${}", c))
+            Mm2Cell::new_pattern(format!("${}", c), Namespace::from(PathBuf::from(source_ns)))
         })
-        .collect::<Vec<Pattern>>();
+        .collect::<Vec<Mm2Cell>>();
 
     let transform_input =
         TransformDetails::new()
             .patterns(patterns)
-            .templates(vec![Template::default()
-                .namespace(PathBuf::from(input.target.first().cloned().unwrap()))
-                .template(template)]);
+            .templates(vec![Mm2Cell::new_template(
+                template,
+                Namespace::from(PathBuf::from(input.target.first().cloned().unwrap())),
+            )]);
 
     Ok(transform_input)
+}
+
+fn union_transform(input: SetOperationInput) -> Result<Vec<TransformDetails>, Status> {
+    // Exceed the maximum number of source namespaces for composition, 26
+    // and
+    // Only one target namespace is allowed
+    if input.source.len() > 26 && input.target.len() != 1 {
+        return Err(Status::BadRequest);
+    }
+
+    let mut union_query: Vec<TransformDetails> = Vec::new();
+
+    for source_ns in input.source.iter() {
+        union_query.push(
+            TransformDetails::new()
+                .patterns(vec![Mm2Cell::new_pattern(
+                    "$x".to_string(),
+                    Namespace::from_path_string(source_ns),
+                )])
+                .templates(vec![Mm2Cell::new_template(
+                    "$x".to_string(),
+                    Namespace::from_path_string(input.target.first().unwrap()),
+                )]),
+        );
+    }
+
+    Ok(union_query)
 }
 
 // unit tests
@@ -469,6 +505,35 @@ mod tests {
         assert_eq!(
             transform_input.templates[0].build(),
             "(ns3 (ns3a727d4f9-836a-4e4c-9480 $a $b ))".to_string()
+        );
+    }
+
+    #[test]
+    fn test_union_transform() {
+        let input = SetOperationInput {
+            source: vec!["ns1".to_string(), "ns2".to_string()],
+            target: vec!["ns3".to_string()],
+        };
+
+        let transform_inputs = union_transform(input).unwrap();
+
+        assert_eq!(transform_inputs.len(), 2);
+
+        assert_eq!(
+            transform_inputs[0].patterns[0].build(),
+            "(ns1 (ns1a727d4f9-836a-4e4c-9480 $x))".to_string()
+        );
+        assert_eq!(
+            transform_inputs[1].patterns[0].build(),
+            "(ns2 (ns2a727d4f9-836a-4e4c-9480 $x))".to_string()
+        );
+        assert_eq!(
+            transform_inputs[0].templates[0].build(),
+            "(ns3 (ns3a727d4f9-836a-4e4c-9480 $x))".to_string()
+        );
+        assert_eq!(
+            transform_inputs[1].templates[0].build(),
+            "(ns3 (ns3a727d4f9-836a-4e4c-9480 $x))".to_string()
         );
     }
 }
