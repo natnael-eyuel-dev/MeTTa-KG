@@ -363,7 +363,7 @@ pub async fn tails_union(
         Namespace::from_path_string(&input.source[0]),
     )];
     let templates = vec![Mm2Cell::new_template(
-        "($t)".to_string(),
+        "$t".to_string(),
         Namespace::from_path_string(&input.target[0]),
     )];
 
