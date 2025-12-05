@@ -82,10 +82,10 @@ const sidebarSections = [
         to: "/restrict",
       },
       {
-        id: "decapitate",
-        label: "Decapitate",
+        id: "tailsUnion",
+        label: "Tails Union",
         icon: () => <span class="text-xl">T</span>,
-        to: "/decapitate",
+        to: "/tailsunion",
         component: TailsUnionPage,
       },
       {
