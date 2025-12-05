@@ -9,51 +9,65 @@ import {
   CardTitle,
   CardDescription,
 } from "~/components/ui/Card";
-import NameSpace from "~/pages/index/components/NameSpace";
 import { getAllTokens } from "~/lib/api";
-import { rootToken, tokenRootNamespace, namespace } from "~/lib/state";
+import { rootToken, tokenRootNamespace } from "~/lib/state";
 import { Copy, Check } from "lucide-solid";
 import { executeTailsUnion, isLoading, isPolling, stopPolling } from "./lib";
 import { onCleanup } from "solid-js";
-
-interface NsItem {
-  id: string;
-  namespace: string[];
-}
+import { TailsUnionInput as TailsUnionInputComponent } from "./components/TailsUnionInput";
 
 const TailsUnionPage: Component = () => {
   const [state, setState] = createStore({
-    source: { id: createUniqueId(), namespace: [...namespace()] },
-    target: { id: createUniqueId(), namespace: [...namespace()] },
+    patterns: { id: createUniqueId(), namespace: [""] },
+    templates: { id: createUniqueId(), namespace: [""] },
     copied: false,
   });
 
   onCleanup(stopPolling);
 
-  const updateSource = (ns: string[]) =>
-    setState(
-      "source",
-      produce((s: NsItem) => {
-        s.namespace = ns;
-      })
-    );
-  const updateTarget = (ns: string[]) =>
-    setState(
-      "target",
-      produce((t: NsItem) => {
-        t.namespace = ns;
-      })
-    );
+  const convertToSExpression = (
+    path: string[],
+    variable: string = "$x"
+  ): string => {
+    if (path.length === 0) {
+      return `${variable}`;
+    }
 
-  const toNs = (ns: string[]) => ns.filter(Boolean).join("/");
+    if (path.length >= 1) {
+      if (path[0] === "" || path[0] === "/") {
+        if (path.length === 1) {
+          return `${variable}`;
+        }
+        path = path.slice(1);
+      }
+    }
 
+    let result = "";
+
+    // Build the nested structure from the end to the beginning
+    for (let i = path.length - 1; i >= 0; i--) {
+      if (i === path.length - 1) {
+        // Last element contains the variable
+        result = `(${path[i]} ${variable})`;
+      } else {
+        // Wrap previous result in parentheses
+        result = `(${path[i]} ${result})`;
+      }
+    }
+
+    return result;
+  };
   const buildPreview = () => {
-    const src = toNs(state.source.namespace);
-    const tgt = toNs(state.target.namespace);
-    return `(transform
-  (, (${src} ($h $t)))
-  (, (${tgt} ($t)))
-)`;
+    const patternExprs: string = convertToSExpression(
+      state.patterns.namespace,
+      "($x $y)"
+    );
+    const templatesExprs: string = convertToSExpression(
+      state.templates.namespace,
+      "$y"
+    );
+
+    return `(transform\n (, ${patternExprs})\n (, ${templatesExprs})\n)`;
   };
 
   const copyPreview = () => {
@@ -63,125 +77,140 @@ const TailsUnionPage: Component = () => {
     setTimeout(() => setState("copied", false), 2000);
   };
 
-  const canRun = () =>
-    state.source.namespace.filter(Boolean).length > 0 &&
-    state.target.namespace.filter(Boolean).length > 0;
-
   const handleRun = async () => {
-    await executeTailsUnion(state.source.namespace, state.target.namespace);
+    await executeTailsUnion(
+      state.patterns.namespace,
+      state.templates.namespace
+    );
+  };
+
+  const addPattern = () => {
+    setState("patterns", { id: createUniqueId(), namespace: [""] });
+  };
+
+  const updatePattern = (ids: string, field: "namespace", value: string[]) => {
+    setState(
+      "patterns",
+      produce((patterns) => {
+        if (patterns.id === ids) {
+          patterns[field] = value;
+        }
+      })
+    );
+  };
+
+  const addTemplate = () => {
+    setState("templates", { id: createUniqueId(), namespace: [""] });
+  };
+
+  const updateTemplate = (ids: string, field: "namespace", value: string[]) => {
+    setState(
+      "templates",
+      produce((templates) => {
+        if (templates.id === ids) {
+          templates[field] = value;
+        }
+      })
+    );
   };
 
   return (
     <div class="ml-10 mt-8">
       <CommandCard
         title="Tails Union"
-        description="Emit tails from head-tail pairs into target namespace"
+        description="Emit tails from head-tail pairs into templates namespace"
       >
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="lg:col-span-2 space-y-6">
-            <Card class="border-l-4 border-l-primary">
-              <CardHeader>
-                <CardTitle>Source Namespace</CardTitle>
-                <CardDescription>
-                  Head-tail facts (e.g. (mammal (human (male 1))))
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <NameSpace
-                  namespace={state.source.namespace}
-                  setNamespace={updateSource}
-                  rootToken={!!rootToken()}
-                  tokenRootNamespace={tokenRootNamespace}
-                  getAllTokens={getAllTokens}
-                />
-              </CardContent>
-            </Card>
+        <div class="space-y-6">
+          {/* Responsive Layout */}
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Builder - 2/3 */}
+            <div class="lg:col-span-2 space-y-6">
+              <TailsUnionInputComponent
+                type="patterns"
+                items={state.patterns}
+                addItem={addPattern}
+                updateItem={updatePattern}
+                accentColor="primary"
+                rootToken={rootToken()}
+                tokenRootNamespace={tokenRootNamespace}
+                getAllTokens={getAllTokens}
+              />
+              <TailsUnionInputComponent
+                type="templates"
+                items={state.templates}
+                addItem={addTemplate}
+                updateItem={updateTemplate}
+                accentColor="primary"
+                rootToken={rootToken()}
+                tokenRootNamespace={tokenRootNamespace}
+                getAllTokens={getAllTokens}
+              />
+            </div>
 
-            <Card class="border-l-4 border-l-primary">
-              <CardHeader>
-                <CardTitle>Target Namespace</CardTitle>
-                <CardDescription>
-                  Where tail expressions will be written
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <NameSpace
-                  namespace={state.target.namespace}
-                  setNamespace={updateTarget}
-                  rootToken={!!rootToken()}
-                  tokenRootNamespace={tokenRootNamespace}
-                  getAllTokens={getAllTokens}
-                />
-              </CardContent>
-            </Card>
-
-            <Button
-              class="w-full"
-              disabled={!canRun() || isLoading() || isPolling()}
-              onClick={handleRun}
-            >
-              <Show when={isLoading() || isPolling()}>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  class="animate-spin mr-2 h-4 w-4"
-                >
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              </Show>
-              <Show
-                when={isLoading()}
-                fallback={
-                  <Show when={isPolling()} fallback={"Run Tails Union"}>
-                    Waiting for results...
-                  </Show>
-                }
-              >
-                Processing...
-              </Show>
-            </Button>
-          </div>
-
-          <div class="lg:col-span-1">
-            <Card class="sticky top-4">
-              <CardHeader>
-                <CardTitle>S-Expression Preview</CardTitle>
-                <CardDescription>
-                  Drop head; keep tail ($h $t) → ($t)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <pre class="text-sm font-mono bg-muted p-3 rounded overflow-auto">
-                  {buildPreview()}
-                </pre>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={copyPreview}
-                  class="w-full mt-4"
-                >
-                  {state.copied ? (
-                    <Check class="w-4 h-4 mr-2" />
-                  ) : (
-                    <Copy class="w-4 h-4 mr-2" />
-                  )}
-                  {state.copied ? "Copied!" : "Copy Expression"}
-                </Button>
-                <div class="mt-4 p-3 bg-muted/50 rounded text-sm text-muted-foreground">
-                  Requires read on source and write on target. Backend executes
-                  fixed transform pattern.
-                </div>
-              </CardContent>
-            </Card>
+            {/* Preview - 1/3 */}
+            <div class="lg:col-span-1">
+              <Card class="sticky top-4">
+                <CardHeader>
+                  <CardTitle>S-Expression Preview</CardTitle>
+                  <CardDescription>
+                    Drop head; keep tail ($h $t) → ($t)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <pre class="text-sm font-mono bg-muted p-3 rounded overflow-auto">
+                    {buildPreview()}
+                  </pre>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={copyPreview}
+                    class="w-full mt-4"
+                  >
+                    {state.copied ? (
+                      <Check class="w-4 h-4 mr-2" />
+                    ) : (
+                      <Copy class="w-4 h-4 mr-2" />
+                    )}
+                    {state.copied ? "Copied!" : "Copy Expression"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
+
+        <Button
+          onClick={handleRun}
+          disabled={isLoading() || isPolling()}
+          class="inline-flex items-center justify-center w-[180px] h-10 mt-4"
+        >
+          <Show when={isLoading() || isPolling()}>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="animate-spin mr-2 h-4 w-4"
+            >
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+          </Show>
+          <Show
+            when={isLoading()}
+            fallback={
+              <Show when={isPolling()} fallback={"Run Tails Union"}>
+                Waiting for results...
+              </Show>
+            }
+          >
+            Performing Tails Union...
+          </Show>
+        </Button>
       </CommandCard>
     </div>
   );

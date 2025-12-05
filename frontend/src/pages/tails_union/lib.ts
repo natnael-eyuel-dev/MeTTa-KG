@@ -1,6 +1,5 @@
 import { createSignal } from "solid-js";
 import { isPathClear, request } from "~/lib/api";
-import { namespace } from "~/lib/state";
 import { showToast } from "~/components/ui/Toast";
 import { refreshSpace } from "../load/lib";
 
@@ -14,19 +13,12 @@ export const stopPolling = () => {
   setIsPolling(false);
 };
 
-const currentRoot = () => {
-  const arr = namespace();
-  const parts = arr.filter(Boolean);
-  if (parts.length === 0) return "/";
-  const p = parts.join("/");
-  return p.endsWith("/") ? p : `${p}/`;
-};
-
 const toPath = (ns: string[]) => {
   const parts = ns.filter(Boolean);
-  if (parts.length === 0) return currentRoot();
-  const p = parts.join("/");
-  return p.endsWith("/") ? p : `${p}/`;
+  if (parts.length === 0) {
+    return "";
+  }
+  return parts.join("/");
 };
 
 export const startPolling = (spacePath: string) => {
@@ -61,23 +53,14 @@ export const executeTailsUnion = async (
   sourceNs: string[],
   targetNs: string[]
 ) => {
-  const sourcePath = toPath(sourceNs).replace(/\/$/, "");
-  const targetPath = toPath(targetNs).replace(/\/$/, "");
-
-  if (!sourcePath || !targetPath) {
-    showToast({
-      title: "Invalid Namespaces",
-      description: "Select both source and target namespaces.",
-      variant: "destructive",
-    });
-    return;
-  }
+  const sourcePath = toPath(sourceNs);
+  const targetPath = toPath(targetNs);
 
   setIsLoading(true);
   stopPolling();
 
   try {
-    if (!(await isPathClear(targetPath + "/"))) {
+    if (!(await isPathClear(targetPath))) {
       showToast({
         title: "Space Busy",
         description: "Target namespace busy; wait for completion.",
