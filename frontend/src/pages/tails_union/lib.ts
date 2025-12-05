@@ -42,10 +42,14 @@ export const startPolling = (spacePath: string) => {
         });
         refreshSpace();
       }
-    } catch (e) {
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred.";
       showToast({
         title: "Polling Error",
-        description: "Failed to poll tails union status.",
+        description: errorMessage,
         variant: "destructive",
       });
       stopPolling();
@@ -53,7 +57,10 @@ export const startPolling = (spacePath: string) => {
   }, 3000);
 };
 
-export const executeTailsUnion = async (sourceNs: string[], targetNs: string[]) => {
+export const executeTailsUnion = async (
+  sourceNs: string[],
+  targetNs: string[]
+) => {
   const sourcePath = toPath(sourceNs).replace(/\/$/, "");
   const targetPath = toPath(targetNs).replace(/\/$/, "");
 
@@ -87,7 +94,10 @@ export const executeTailsUnion = async (sourceNs: string[], targetNs: string[]) 
     });
 
     if (ok) {
-      showToast({ title: "TailsUnion Started", description: "Polling for completion..." });
+      showToast({
+        title: "TailsUnion Started",
+        description: "Polling for completion...",
+      });
       startPolling(targetPath + "/");
     } else {
       showToast({

@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-
-use api::mork_api::{Pattern, Template};
+use api::mork_api::{Mm2Cell, Namespace};
 use api::rocket;
 use api::routes::spaces::Mm2InputMultiWithNamespace;
 use httpmock::prelude::*;
@@ -29,9 +27,12 @@ async fn test_tails_union_transform_success() {
         then.status(200).body("Transform successful");
     });
 
-    let client = Client::tracked(rocket()).await.expect("valid rocket instance");
+    let client = Client::tracked(rocket())
+        .await
+        .expect("valid rocket instance");
 
-    let upload_body = "(mammal (human (male 1)))\n(mammal (human (male 1)))\n(reptile (snake (male 1)))";
+    let upload_body =
+        "(mammal (human (male 1)))\n(mammal (human (male 1)))\n(reptile (snake (male 1)))";
     let upload_resp = client
         .post("/spaces/upload/test/tlu")
         .header(Header::new("authorization", token.code.clone()))
@@ -41,12 +42,14 @@ async fn test_tails_union_transform_success() {
     assert_eq!(upload_resp.status(), Status::Ok);
 
     let mm2_input = Mm2InputMultiWithNamespace {
-        patterns: vec![Pattern::default()
-            .pattern("($h $t)".to_string())
-            .namespace(PathBuf::from("/test/tlu"))],
-        templates: vec![Template::default()
-            .template("($t)".to_string())
-            .namespace(PathBuf::from("/test/out"))],
+        patterns: vec![Mm2Cell::new_pattern(
+            "($h $t)".to_string(),
+            Namespace::from_path_string("test/tlu"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($t)".to_string(),
+            Namespace::from_path_string("/test/out"),
+        )],
     };
 
     let transform_resp = client
@@ -97,15 +100,19 @@ async fn test_tails_union_unauthorized() {
         then.status(200).body("Transform successful");
     });
 
-    let client = Client::tracked(rocket()).await.expect("valid rocket instance");
+    let client = Client::tracked(rocket())
+        .await
+        .expect("valid rocket instance");
 
     let mm2_input = Mm2InputMultiWithNamespace {
-        patterns: vec![Pattern::default()
-            .pattern("($h $t)".to_string())
-            .namespace(PathBuf::from("/test/tlu"))],
-        templates: vec![Template::default()
-            .template("($t)".to_string())
-            .namespace(PathBuf::from("/test/out"))],
+        patterns: vec![Mm2Cell::new_pattern(
+            "($h $t)".to_string(),
+            Namespace::from_path_string("/test/tlu"),
+        )],
+        templates: vec![Mm2Cell::new_template(
+            "($t)".to_string(),
+            Namespace::from_path_string("/test/out"),
+        )],
     };
 
     let resp = client
