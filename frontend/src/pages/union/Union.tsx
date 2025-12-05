@@ -127,9 +127,7 @@ const UnionPage: Component = () => {
   };
 
   const copyExpression = () => {
-    navigator.clipboard.writeText(
-      buildUnionSExpr(state.patterns, state.templates)
-    );
+    navigator.clipboard.writeText(buildUnionSExpr(state.patterns));
     setState("copied", true);
     setTimeout(() => setState("copied", false), 2000);
   };
@@ -181,7 +179,7 @@ const UnionPage: Component = () => {
                 </CardHeader>
                 <CardContent>
                   <pre class="text-sm font-mono bg-muted p-3 rounded overflow-auto">
-                    {buildUnionSExpr(state.patterns, state.templates)}
+                    {buildUnionSExpr(state.patterns)}
                   </pre>
                   <Button
                     variant="default"
