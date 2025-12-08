@@ -27,6 +27,10 @@ import ArrowRight from "lucide-solid/icons/arrow-right";
 import Box from "lucide-solid/icons/box";
 import Key from "lucide-solid/icons/key";
 import Code from "lucide-solid/icons/code";
+import Network from "lucide-solid/icons/network";
+import Plus from "lucide-solid/icons/plus";
+import RotateCcw from "lucide-solid/icons/rotate-ccw";
+import AlertTriangle from "lucide-solid/icons/alert-triangle";
 import { checkConfiguration } from "~/lib/state";
 import previewImage from "~/assets/preview.png";
 
@@ -35,7 +39,12 @@ export default function Landing() {
   const [morkUrl, setMorkUrl] = createSignal("http://127.0.0.1:8001");
   const [isLoading, setIsLoading] = createSignal(false);
   const [isConfigOpen, setIsConfigOpen] = createSignal(false);
-  const [dbType, setDbType] = createSignal<"sqlite" | "postgres">("sqlite"); // Default to sqlite
+  const [dbType, setDbType] = createSignal<"sqlite" | "postgres">("sqlite");
+  const [detectedMorkProcess, setDetectedMorkProcess] = createSignal<
+    string | null
+  >(null);
+  const [isMorkRunning, setIsMorkRunning] = createSignal(false);
+  const [overrideMork, setOverrideMork] = createSignal(false);
   const navigate = useNavigate();
 
   onMount(async () => {
@@ -48,6 +57,15 @@ export default function Landing() {
         if (res.ok) {
           const data = await res.json();
           setDbType(data.db_type);
+          setDetectedMorkProcess(data.port_8001_process);
+          setIsMorkRunning(data.is_mork);
+
+          // If port 8001 is blocked by something that isn't Mork, suggest 8002
+          if (data.port_8001_process && !data.is_mork) {
+            setMorkUrl("http://127.0.0.1:8002");
+          } else if (data.db_type === "sqlite" && !dbUrl()) {
+            setDbUrl("mettakg.db");
+          }
         }
       } catch (e) {
         console.error("Failed to fetch build info", e);
@@ -59,21 +77,27 @@ export default function Landing() {
     e.preventDefault();
 
     if (!dbUrl().trim()) {
+      if (dbType() === "postgres") {
+        showToast({
+          title: "Validation Error",
+          description: "PostgreSQL Database URL is required.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setDbUrl("mettakg.db");
       showToast({
-        title: "Validation Error",
-        description: "Database URL is required.",
-        variant: "destructive",
+        title: "Database URL set",
+        description: "Defaulting to SQLite database 'mettakg.db'.",
       });
-      return;
     }
 
     if (!morkUrl().trim()) {
       showToast({
-        title: "Validation Error",
-        description: "MORK Server URL is required.",
-        variant: "destructive",
+        title: "MORK Server URL Set",
+        description: "Defaulting to http://127.0.0.1:8000",
       });
-      return;
+      setMorkUrl("http://127.0.0.1:8001");
     }
 
     setIsLoading(true);
@@ -82,7 +106,6 @@ export default function Landing() {
       const formData = new FormData();
       formData.append("database_url", dbUrl());
       formData.append("mork_server_url", morkUrl());
-      formData.append("mettakg_api_url", "http://127.0.0.1:8000");
 
       const response = await fetch("/submit", {
         method: "POST",
@@ -115,31 +138,38 @@ export default function Landing() {
 
   return (
     <div class="min-h-screen w-full bg-background text-foreground flex flex-col">
-      {/* Hero Section */}
-      <header class="w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div class="container flex h-14 max-w-screen-2xl items-center justify-between px-8">
-          <div class="flex items-center gap-2 font-bold text-xl">
-            <div class="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground">
-              M
-            </div>
-            MeTTa-KG
+      {/* Header - Replaced with style from Header.tsx + Logo from Sidebar.tsx */}
+      <header class="h-16 bg-background/95 backdrop-blur border-b border-border/40 flex items-center justify-between px-8 sticky top-0 z-50">
+        <div class="flex items-center gap-2">
+          <Network class="h-8 w-8 text-primary" />
+          <div>
+            <h1 class="text-primary font-bold text-lg tracking-wider">
+              METTA-KG
+            </h1>
+            <p class="text-neutral-500 text-xs">VERSION 0.1.0</p>
           </div>
-          <nav class="flex items-center gap-4">
-            <a
-              href="https://github.com/trueagi-io/metta-kg"
-              target="_blank"
-              class="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-            >
-              GitHub
-            </a>
-            <a
-              href="https://metta-lang.dev/"
-              target="_blank"
-              class="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-            >
-              MeTTa Lang
-            </a>
-          </nav>
+        </div>
+        <div class="flex items-center gap-4">
+          <a
+            href="https://github.com/trueagi-io/MORK"
+            class="uppercase text-neutral-400 hover:text-primary hover:underline"
+          >
+            MORK
+          </a>
+          <span class="text-primary">·</span>
+          <a
+            href="https://github.com/trueagi-io/MORK/wiki"
+            class="uppercase text-neutral-400 hover:text-primary hover:underline"
+          >
+            DOCS
+          </a>
+          <span class="text-primary">·</span>
+          <a
+            href="https://chat.singularitynet.io/chat/channels/mork"
+            class="uppercase text-neutral-400 hover:text-primary hover:underline"
+          >
+            COMMUNITY
+          </a>
         </div>
       </header>
 
@@ -162,16 +192,6 @@ export default function Landing() {
                 onClick={() => setIsConfigOpen(true)}
               >
                 Get Started <ArrowRight class="w-5 h-5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                class="h-12 px-8 text-lg"
-                as="a"
-                href="https://deepfunding.ai/proposal/scalable-metta-knowledge-graphs/"
-                target="_blank"
-              >
-                Learn More
               </Button>
             </div>
           </div>
@@ -248,30 +268,6 @@ export default function Landing() {
         </section>
       </main>
 
-      <footer class="py-6 md:px-8 md:py-0 border-t border-border/40">
-        <div class="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row mx-auto">
-          <p class="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            Built by{" "}
-            <a
-              href="https://trueagi.io"
-              target="_blank"
-              class="font-medium underline underline-offset-4"
-            >
-              TrueAGI
-            </a>
-            . The source code is available on{" "}
-            <a
-              href="https://github.com/trueagi-io/metta-kg"
-              target="_blank"
-              class="font-medium underline underline-offset-4"
-            >
-              GitHub
-            </a>
-            .
-          </p>
-        </div>
-      </footer>
-
       {/* Configuration Dialog */}
       <Dialog open={isConfigOpen()} onOpenChange={setIsConfigOpen}>
         <DialogContent class="sm:max-w-[525px]">
@@ -291,7 +287,7 @@ export default function Landing() {
                 <TextFieldInput
                   placeholder={
                     dbType() === "sqlite"
-                      ? "metta_kg.db"
+                      ? "mettakg.db"
                       : "postgres://user:pass@localhost/dbname"
                   }
                   disabled={isLoading()}
@@ -306,13 +302,87 @@ export default function Landing() {
 
             <div class="space-y-2">
               <TextField value={morkUrl()} onChange={setMorkUrl}>
-                <TextFieldLabel class="flex items-center gap-2">
-                  <Server class="w-4 h-4" /> MORK Server URL
-                </TextFieldLabel>
-                <TextFieldInput
-                  placeholder="http://127.0.0.1:8001"
-                  disabled={isLoading()}
-                />
+                <div class="flex items-center justify-between">
+                  <TextFieldLabel class="flex items-center gap-2">
+                    <Server class="w-4 h-4" /> MORK Server URL
+                  </TextFieldLabel>
+                  {detectedMorkProcess() && isMorkRunning() && (
+                    <Button
+                      variant="outline"
+                      class="h-7 px-3 text-xs gap-2 border-dashed hover:border-solid hover:bg-secondary/50 transition-all"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const willOverride = !overrideMork();
+                        setOverrideMork(willOverride);
+                        if (!willOverride) {
+                          setMorkUrl("http://127.0.0.1:8001");
+                        } else {
+                          setMorkUrl("http://127.0.0.1:8002");
+                        }
+                      }}
+                    >
+                      {overrideMork() ? (
+                        <>
+                          <RotateCcw class="w-3.5 h-3.5 text-primary" /> Use
+                          Detected
+                        </>
+                      ) : (
+                        <>
+                          <Plus class="w-3.5 h-3.5 text-primary" /> New Instance
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {detectedMorkProcess() &&
+                isMorkRunning() &&
+                !overrideMork() ? (
+                  <div class="rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                    <div class="flex items-center gap-3">
+                      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
+                        <div class="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" />
+                      </div>
+                      <div class="flex-1">
+                        <p class="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                          Mork Instance Detected
+                        </p>
+                        <p class="text-xs text-emerald-700 dark:text-emerald-300">
+                          Found running process "{detectedMorkProcess()}". We'll
+                          connect to this instance automatically.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="mt-2">
+                      <TextFieldInput
+                        class="h-8 text-xs bg-white/50 dark:bg-black/20"
+                        disabled={true}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div class="space-y-2">
+                    {detectedMorkProcess() && !isMorkRunning() && (
+                      <div class="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                        <div class="flex items-start gap-3">
+                          <AlertTriangle class="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <div class="text-xs text-amber-800 dark:text-amber-200">
+                            <p class="font-medium mb-1">Port 8001 is in use</p>
+                            <p>
+                              The process "{detectedMorkProcess()}" is already
+                              using port 8001. Please specify a different port
+                              for the new Mork instance.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <TextFieldInput
+                      placeholder="http://127.0.0.1:8001"
+                      disabled={isLoading()}
+                    />
+                  </div>
+                )}
               </TextField>
             </div>
 
