@@ -25,7 +25,7 @@ fn main() {
             panic!("npm install failed");
         }
 
-        let status = Command::new(pnpm)
+        let status = Command::new(npm)
             .args(["run", "build"])
             .current_dir(&frontend_dir)
             .status()
@@ -34,7 +34,7 @@ fn main() {
             panic!("frontend build failed");
         }
 
-        let out_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+        let out_dir: PathBuf = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
         let ui_dist = out_dir.join("ui-dist");
         let _ = fs::remove_dir_all(&ui_dist);
         fs::create_dir_all(&ui_dist).expect("failed to create ui-dist");
@@ -45,22 +45,6 @@ fn main() {
 
     let mork_bin_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("mork-bin");
     let mork_binary_path = mork_bin_dir.join("mork-server");
-
-    let url = "https://github.com/Qoba-ai/MeTTa-KG/releases/download/stable/mork_server-x86_64-unknown-linux-gnu";
-    println!("Mork binary missing - downloading from {url}");
-
-    fs::create_dir_all(&mork_bin_dir).expect("failed to create mork-bin directory");
-
-    let status = Command::new("curl")
-        .args(["-L", "-o"])
-        .arg(&mork_binary_path)
-        .arg(url)
-        .status()
-        .expect("failed to run curl");
-
-    if !status.success() {
-        panic!("Failed to download Mork binary from {url}");
-    }
 
     #[cfg(unix)]
     {
