@@ -138,6 +138,7 @@ async fn submit_setup(
 struct BuildInfo {
     db_type: &'static str,
     port_8001_process: Option<String>,
+    is_mork: bool,
 }
 
 fn get_process_on_port_8001() -> Option<String> {
@@ -152,7 +153,11 @@ fn get_process_on_port_8001() -> Option<String> {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
                 if let Some(stripped) = line.strip_prefix('c') {
-                    return Some(stripped.to_string());
+                    let name = stripped.to_string();
+                    if name.to_lowercase().contains("mork") {
+                        return Some(name);
+                    }
+                    return Some(format!("{} (External)", name));
                 }
             }
         }
@@ -174,10 +179,15 @@ fn build_info() -> rocket::serde::json::Json<BuildInfo> {
     };
 
     let port_8001_process = get_process_on_port_8001();
+    let is_mork = port_8001_process
+        .as_ref()
+        .map(|s| s.to_lowercase().contains("mork"))
+        .unwrap_or(false);
 
     rocket::serde::json::Json(BuildInfo {
         db_type,
         port_8001_process,
+        is_mork,
     })
 }
 

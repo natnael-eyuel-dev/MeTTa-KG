@@ -30,6 +30,7 @@ import Code from "lucide-solid/icons/code";
 import Network from "lucide-solid/icons/network";
 import Plus from "lucide-solid/icons/plus";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
+import AlertTriangle from "lucide-solid/icons/alert-triangle";
 import { checkConfiguration } from "~/lib/state";
 import previewImage from "~/assets/preview.png";
 
@@ -42,6 +43,7 @@ export default function Landing() {
   const [detectedMorkProcess, setDetectedMorkProcess] = createSignal<
     string | null
   >(null);
+  const [isMorkRunning, setIsMorkRunning] = createSignal(false);
   const [overrideMork, setOverrideMork] = createSignal(false);
   const navigate = useNavigate();
 
@@ -56,7 +58,12 @@ export default function Landing() {
           const data = await res.json();
           setDbType(data.db_type);
           setDetectedMorkProcess(data.port_8001_process);
-          if (data.db_type === "sqlite" && !dbUrl()) {
+          setIsMorkRunning(data.is_mork);
+
+          // If port 8001 is blocked by something that isn't Mork, suggest 8002
+          if (data.port_8001_process && !data.is_mork) {
+            setMorkUrl("http://127.0.0.1:8002");
+          } else if (data.db_type === "sqlite" && !dbUrl()) {
             setDbUrl("mettakg.db");
           }
         }
@@ -299,39 +306,37 @@ export default function Landing() {
                   <TextFieldLabel class="flex items-center gap-2">
                     <Server class="w-4 h-4" /> MORK Server URL
                   </TextFieldLabel>
-                  {detectedMorkProcess() &&
-                    detectedMorkProcess()?.toLowerCase().includes("mork") && (
-                      <Button
-                        variant="outline"
-                        class="h-7 px-3 text-xs gap-2 border-dashed hover:border-solid hover:bg-secondary/50 transition-all"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          const willOverride = !overrideMork();
-                          setOverrideMork(willOverride);
-                          if (!willOverride) {
-                            setMorkUrl("http://127.0.0.1:8001");
-                          } else {
-                            setMorkUrl("http://127.0.0.1:8002");
-                          }
-                        }}
-                      >
-                        {overrideMork() ? (
-                          <>
-                            <RotateCcw class="w-3.5 h-3.5 text-primary" /> Use
-                            Detected
-                          </>
-                        ) : (
-                          <>
-                            <Plus class="w-3.5 h-3.5 text-primary" /> New
-                            Instance
-                          </>
-                        )}
-                      </Button>
-                    )}
+                  {detectedMorkProcess() && isMorkRunning() && (
+                    <Button
+                      variant="outline"
+                      class="h-7 px-3 text-xs gap-2 border-dashed hover:border-solid hover:bg-secondary/50 transition-all"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const willOverride = !overrideMork();
+                        setOverrideMork(willOverride);
+                        if (!willOverride) {
+                          setMorkUrl("http://127.0.0.1:8001");
+                        } else {
+                          setMorkUrl("http://127.0.0.1:8002");
+                        }
+                      }}
+                    >
+                      {overrideMork() ? (
+                        <>
+                          <RotateCcw class="w-3.5 h-3.5 text-primary" /> Use
+                          Detected
+                        </>
+                      ) : (
+                        <>
+                          <Plus class="w-3.5 h-3.5 text-primary" /> New Instance
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 {detectedMorkProcess() &&
-                detectedMorkProcess()?.toLowerCase().includes("mork") &&
+                isMorkRunning() &&
                 !overrideMork() ? (
                   <div class="rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
                     <div class="flex items-center gap-3">
@@ -349,7 +354,6 @@ export default function Landing() {
                       </div>
                     </div>
                     <div class="mt-2">
-                      {/* Removed explicit value/onChange to rely on TextField context */}
                       <TextFieldInput
                         class="h-8 text-xs bg-white/50 dark:bg-black/20"
                         disabled={true}
@@ -357,11 +361,27 @@ export default function Landing() {
                     </div>
                   </div>
                 ) : (
-                  // Removed explicit value/onChange to rely on TextField context
-                  <TextFieldInput
-                    placeholder="http://127.0.0.1:8001"
-                    disabled={isLoading()}
-                  />
+                  <div class="space-y-2">
+                    {detectedMorkProcess() && !isMorkRunning() && (
+                      <div class="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                        <div class="flex items-start gap-3">
+                          <AlertTriangle class="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <div class="text-xs text-amber-800 dark:text-amber-200">
+                            <p class="font-medium mb-1">Port 8001 is in use</p>
+                            <p>
+                              The process "{detectedMorkProcess()}" is already
+                              using port 8001. Please specify a different port
+                              for the new Mork instance.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <TextFieldInput
+                      placeholder="http://127.0.0.1:8001"
+                      disabled={isLoading()}
+                    />
+                  </div>
                 )}
               </TextField>
             </div>
