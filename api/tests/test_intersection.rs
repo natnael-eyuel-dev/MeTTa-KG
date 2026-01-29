@@ -1,10 +1,11 @@
-use api::rocket;
-use api::routes::spaces::SetOperationInput;
 use httpmock::prelude::*;
+use metta_kg::rocket;
+use metta_kg::routes::spaces::SetOperationInput;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use rocket::serde::json::serde_json;
 use serial_test::serial;
+use std::env;
 
 #[path = "common.rs"]
 mod common;
@@ -33,8 +34,14 @@ async fn test_intersection_success() {
         then.status(200).body("Transform successful");
     });
 
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Create client
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -45,7 +52,7 @@ async fn test_intersection_success() {
     .unwrap();
 
     let response = client
-        .post("/spaces/intersection")
+        .post("/api/spaces/intersection")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -68,7 +75,14 @@ async fn test_intersection_unauthorized_namespace() {
     common::setup(&server.base_url());
 
     let token = common::create_test_token("/test/", true, true);
-    let client = Client::tracked(rocket())
+
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -79,7 +93,7 @@ async fn test_intersection_unauthorized_namespace() {
     .unwrap();
 
     let response = client
-        .post("/spaces/intersection")
+        .post("/api/spaces/intersection")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -100,7 +114,14 @@ async fn test_intersection_bad_request_single_source() {
     common::setup(&server.base_url());
 
     let token = common::create_test_token("/test/", true, true);
-    let client = Client::tracked(rocket())
+
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -111,7 +132,7 @@ async fn test_intersection_bad_request_single_source() {
     .unwrap();
 
     let response = client
-        .post("/spaces/intersection")
+        .post("/api/spaces/intersection")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()

@@ -45,6 +45,9 @@ const [namespace] = createRoot(() => {
   return [memo];
 });
 
+// New signal for configuration status
+const [isConfigured, setIsConfigured] = createSignal(false);
+
 export {
   rootToken,
   tokenRootNamespace,
@@ -52,6 +55,7 @@ export {
   tabs,
   activeTabId,
   setTokenRootNamespace,
+  isConfigured,
   setTabs,
   setActiveTabId,
 };
@@ -71,6 +75,28 @@ export const setRootToken = (token: string | null) => {
       },
     ]);
     setActiveTabId("default");
+  }
+};
+
+export const formatedNamespace = createMemo(() => {
+  if (namespace().length <= 1) return "/";
+  return namespace().join("/");
+});
+
+export const checkConfiguration = async () => {
+  try {
+    const res = await fetch("/api/tokens");
+
+    if (res.ok || res.status === 401) {
+      setIsConfigured(true);
+      return true;
+    }
+
+    setIsConfigured(false);
+    return false;
+  } catch {
+    setIsConfigured(false);
+    return false;
   }
 };
 
@@ -164,11 +190,3 @@ export const setNamespace = (namespace: string[]) => {
   const currentTabId = activeTabId();
   updateTabNamespace(currentTabId, namespace);
 };
-
-export const formatedNamespace = createRoot(() =>
-  createMemo(() => {
-    const ns = namespace();
-    if (ns.length <= 1) return "/";
-    return ns.join("/");
-  })
-);

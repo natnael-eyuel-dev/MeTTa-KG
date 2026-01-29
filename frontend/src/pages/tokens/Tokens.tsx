@@ -1,4 +1,4 @@
-import { Component, Show } from "solid-js";
+import { Component, Show, createSignal } from "solid-js";
 import { CommandCard } from "~/components/common/CommandCard";
 import { RootTokenForm } from "./components/RootTokenForm";
 import { CreateTokenForm } from "./components/CreateTokenForm";
@@ -38,6 +38,10 @@ import {
 } from "./lib";
 
 export const TokensPage: Component = () => {
+  // Add state to control dialog visibility
+  const [isRefreshOpen, setIsRefreshOpen] = createSignal(false);
+  const [isDeleteOpen, setIsDeleteOpen] = createSignal(false);
+
   const isRootTokenSelected = () =>
     selectedTokens().some((t) => t.code === rootToken());
 
@@ -103,7 +107,7 @@ export const TokensPage: Component = () => {
 
               {/* Buttons aligned to bottom */}
               <div class="flex gap-2">
-                <Dialog>
+                <Dialog open={isRefreshOpen()} onOpenChange={setIsRefreshOpen}>
                   <DialogTrigger
                     as={Button}
                     disabled={
@@ -126,16 +130,14 @@ export const TokensPage: Component = () => {
                     <DialogFooter>
                       <Button
                         variant="outline"
-                        onClick={(e) =>
-                          e.currentTarget.closest("dialog")?.close()
-                        }
+                        onClick={() => setIsRefreshOpen(false)}
                       >
                         Cancel
                       </Button>
                       <Button
                         onClick={async () => {
                           await handleRefresh();
-                          document.querySelector("dialog")?.close();
+                          setIsRefreshOpen(false);
                         }}
                       >
                         Refresh
@@ -144,7 +146,7 @@ export const TokensPage: Component = () => {
                   </DialogContent>
                 </Dialog>
 
-                <Dialog>
+                <Dialog open={isDeleteOpen()} onOpenChange={setIsDeleteOpen}>
                   <DialogTrigger
                     as={Button}
                     disabled={
@@ -161,16 +163,18 @@ export const TokensPage: Component = () => {
                       <DialogTitle>Delete Tokens</DialogTitle>
                       <DialogDescription>
                         Are you sure you want to delete{" "}
-                        {selectedTokens().length} token(s)? This action cannot
-                        be undone.
+                        {selectedTokens().length} token(s)?
+                        <div class="mt-2 p-2 bg-destructive/10 text-destructive rounded-md font-medium">
+                          Warning: This will recursively delete all child tokens
+                          (sub-namespaces) associated with these tokens.
+                        </div>
+                        <div class="mt-2">This action cannot be undone.</div>
                       </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                       <Button
                         variant="outline"
-                        onClick={(e) =>
-                          e.currentTarget.closest("dialog")?.close()
-                        }
+                        onClick={() => setIsDeleteOpen(false)}
                       >
                         Cancel
                       </Button>
@@ -178,7 +182,7 @@ export const TokensPage: Component = () => {
                         variant="destructive"
                         onClick={async () => {
                           await handleDelete();
-                          document.querySelector("dialog")?.close();
+                          setIsDeleteOpen(false);
                         }}
                       >
                         Delete

@@ -13,9 +13,11 @@ This README is WIP and is subject to change.
 
 ### Setup
 
+#### Option 1: Using Docker Compose (Recommended)
+
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/MeTTa-KG.git
+   git clone https://github.com/arist76/MeTTa-KG.git
    cd MeTTa-KG
    ```
 
@@ -28,6 +30,40 @@ This README is WIP and is subject to change.
    ```
 
 This will start the API, database, Mork server, and Adminer for database management.
+
+#### Option 2: Download Pre-built Binary (New)
+
+Pre-built binaries are available for multiple platforms via [GitHub Releases](https://github.com/arist76/MeTTa-KG/releases).
+
+1. Download the appropriate binary for your platform from the latest release
+2. Extract the archive:
+   ```bash
+   tar -xzf metta-kg-<version>-<platform>.tar.gz
+   cd metta-kg-<version>
+   ```
+3. Configure environment variables (optional):
+   ```bash
+   cp .env.example .env  # or create as needed
+   ```
+4. Run the application:
+   ```bash
+   ./metta-kg
+   ```
+
+**Features of Pre-built Binary**:
+- ✅ **UI Included**: The frontend is embedded within the binary. Once running, access the web interface at `http://localhost:8000`
+- ✅ **Automatic Database Setup**: SQLite database is automatically created and initialized on first run in the current directory (as `metta.db`)
+- ✅ **Zero Additional Dependencies**: No need to install Node.js, npm, pnpm, or PostgreSQL for basic usage with SQLite
+
+**Supported Platforms**: Linux (x86_64, aarch64), macOS (x86_64, aarch64), Windows (x86_64)
+
+**Database Options**:
+- Default: SQLite (created automatically, no setup required)
+- Advanced: PostgreSQL can be used by building from source with the `postgres` feature flag
+
+#### Option 3: Build from Source (Traditional)
+
+See [Manual Setup](#manual-setup) section below for building the application locally.
 
 ## Running Locally
 
