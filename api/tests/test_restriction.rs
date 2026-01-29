@@ -1,10 +1,12 @@
-use api::rocket;
 use httpmock::prelude::*;
 use httpmock::Regex;
+use metta_kg::cli::AppConfig;
+use metta_kg::rocket;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use rocket::serde::json::{json, serde_json};
 use serial_test::serial;
+use std::env;
 
 #[path = "common.rs"]
 mod common;
@@ -19,6 +21,12 @@ async fn test_restriction_filters_paths_by_prefix() {
 
     let server = MockServer::start();
     common::setup(&server.base_url());
+
+    let config = AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
 
     let token = common::create_test_token("/test/", true, true);
 
@@ -50,7 +58,7 @@ async fn test_restriction_filters_paths_by_prefix() {
         then.status(200).body("Upload successful");
     });
 
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -61,7 +69,7 @@ async fn test_restriction_filters_paths_by_prefix() {
     .unwrap();
 
     let response = client
-        .post("/spaces/restriction")
+        .post("/api/spaces/restriction")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -85,6 +93,12 @@ async fn test_restriction_keeps_exact_match_path_when_prefix_equals_path() {
     let server = MockServer::start();
     common::setup(&server.base_url());
 
+    let config = AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     let token = common::create_test_token("/test/", true, true);
 
     server.mock(|when, then| {
@@ -107,7 +121,7 @@ async fn test_restriction_keeps_exact_match_path_when_prefix_equals_path() {
         then.status(200).body("Upload successful");
     });
 
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -118,7 +132,7 @@ async fn test_restriction_keeps_exact_match_path_when_prefix_equals_path() {
     .unwrap();
 
     let response = client
-        .post("/spaces/restriction")
+        .post("/api/spaces/restriction")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -142,6 +156,12 @@ async fn test_restriction_empty_prefixes_writes_nothing() {
     let server = MockServer::start();
     common::setup(&server.base_url());
 
+    let config = AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     let token = common::create_test_token("/test/", true, true);
 
     server.mock(|when, then| {
@@ -163,7 +183,7 @@ async fn test_restriction_empty_prefixes_writes_nothing() {
         then.status(200).body("Upload successful");
     });
 
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -174,7 +194,7 @@ async fn test_restriction_empty_prefixes_writes_nothing() {
     .unwrap();
 
     let response = client
-        .post("/spaces/restriction")
+        .post("/api/spaces/restriction")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -200,6 +220,12 @@ async fn test_restriction_non_commutative_swapped_sources_no_upload() {
     let server = MockServer::start();
     common::setup(&server.base_url());
 
+    let config = AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     let token = common::create_test_token("/test/", true, true);
 
     // Swapping source order changes the meaning; this verifies order matters.
@@ -220,7 +246,7 @@ async fn test_restriction_non_commutative_swapped_sources_no_upload() {
         then.status(200).body("Upload successful");
     });
 
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -231,7 +257,7 @@ async fn test_restriction_non_commutative_swapped_sources_no_upload() {
     .unwrap();
 
     let response = client
-        .post("/spaces/restriction")
+        .post("/api/spaces/restriction")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -257,9 +283,15 @@ async fn test_restriction_bad_request_wrong_counts() {
     let server = MockServer::start();
     common::setup(&server.base_url());
 
+    let config = AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     let token = common::create_test_token("/test/", true, true);
 
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -270,7 +302,7 @@ async fn test_restriction_bad_request_wrong_counts() {
     .unwrap();
 
     let response = client
-        .post("/spaces/restriction")
+        .post("/api/spaces/restriction")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -291,6 +323,12 @@ async fn test_restriction_unauthorized_namespace_rejected() {
     let server = MockServer::start();
     common::setup(&server.base_url());
 
+    let config = AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Token only allows /test/
     let token = common::create_test_token("/test/", true, true);
 
@@ -301,7 +339,7 @@ async fn test_restriction_unauthorized_namespace_rejected() {
         then.status(200).body("(ignored)");
     });
 
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -312,7 +350,7 @@ async fn test_restriction_unauthorized_namespace_rejected() {
     .unwrap();
 
     let response = client
-        .post("/spaces/restriction")
+        .post("/api/spaces/restriction")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()

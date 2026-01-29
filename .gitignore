@@ -24,3 +24,6 @@ temp/
 
 venv/
 __pycache__/
+
+**/ui-dist
+**/mork-bin
