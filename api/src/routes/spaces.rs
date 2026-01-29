@@ -325,39 +325,178 @@ pub async fn composition(
     }
 }
 
-/// Performs a restriction operation on provided namespaces. `token` must have `permission_write`
-/// on the target namespace and `permission_read` on both source namespaces.
-/// Restriction keeps path facts whose prefix exists in the prefix namespace.
-/// Expected form (conceptual):
-/// (transform
-///     (, (paths $a $b $v) (prefixes $a $b))
-///     (, (target $a $b $v))
-/// )
-#[post("/spaces/restriction", data = "<mm2>")]
+/// Performs a general restriction operation (x <| y) using an API-side trie.
+/// Keeps each `(path ...)` fact from source[0] if there exists a `(prefix ...)` fact
+/// in source[1] that is a prefix of the path tokens.
+///
+/// Payload:
+/// `{ "source": ["/ns/paths", "/ns/prefixes"], "target": ["/ns/out"] }`
+#[post("/spaces/restriction", data = "<input>")]
 pub async fn restriction(
     token: Token,
-    mm2: Json<Mm2InputMultiWithNamespace>,
+    input: Json<SetOperationInput>,
 ) -> Result<Json<bool>, Status> {
-    let mm2 = mm2.into_inner();
-    if !mm2.clone().source_target_permissions(token) {
-        return Err(Status::Unauthorized);
+    mod restriction_impl {
+        use std::collections::HashMap;
+
+        fn normalize_ns(ns: &str) -> String {
+            let trimmed = ns.trim();
+            let trimmed = trimmed.strip_prefix('/').unwrap_or(trimmed);
+            let mut s = trimmed.to_string();
+            if !s.ends_with('/') {
+                s.push('/');
+            }
+            s
+        }
+
+        pub(super) fn ns_is_within(token_ns: &str, requested: &str) -> bool {
+            let token_norm = normalize_ns(token_ns);
+            let req_norm = normalize_ns(requested);
+            req_norm.starts_with(&token_norm)
+        }
+
+        pub(super) fn normalize_ns_for_mork(ns: &str) -> String {
+            normalize_ns(ns)
+        }
+
+        #[derive(Default)]
+        pub(super) struct TrieNode {
+            children: HashMap<String, TrieNode>,
+            terminal: bool,
+        }
+
+        impl TrieNode {
+            pub(super) fn insert(&mut self, prefix: &[String]) {
+                let mut node = self;
+                for part in prefix {
+                    node = node.children.entry(part.clone()).or_default();
+                }
+                node.terminal = true;
+            }
+
+            pub(super) fn has_any_prefix(&self, path: &[String]) -> bool {
+                let mut node = self;
+                for part in path {
+                    if node.terminal {
+                        return true;
+                    }
+                    match node.children.get(part) {
+                        Some(n) => node = n,
+                        None => return false,
+                    }
+                }
+                node.terminal
+            }
+        }
+
+        pub(super) fn extract_balanced_sexprs(text: &str) -> Vec<String> {
+            let mut out = Vec::new();
+            let mut stack: Vec<usize> = Vec::new();
+
+            for (idx, ch) in text.char_indices() {
+                match ch {
+                    '(' => stack.push(idx),
+                    ')' => {
+                        if let Some(start) = stack.pop() {
+                            out.push(text[start..=idx].to_string());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            out
+        }
+
+        pub(super) fn parse_flat_list(expr: &str) -> Option<Vec<String>> {
+            let s = expr.trim();
+            if !s.starts_with('(') || !s.ends_with(')') {
+                return None;
+            }
+            let inner = &s[1..s.len() - 1];
+            if inner.contains('(') || inner.contains(')') {
+                return None;
+            }
+            let parts: Vec<String> = inner
+                .split_whitespace()
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty())
+                .collect();
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts)
+            }
+        }
     }
 
-    // Enforce 2 patterns and 1 template for restriction
-    if mm2.patterns.len() != 2 || mm2.templates.len() != 1 {
+    let input = input.into_inner();
+
+    if input.source.len() != 2 || input.target.len() != 1 {
         return Err(Status::BadRequest);
     }
 
-    let mork_api_client = MorkApiClient::new();
-    let transform_details = TransformDetails::new()
-        .patterns(mm2.patterns.clone())
-        .templates(mm2.templates.clone());
-    let request = TransformRequest::new().transform_input(transform_details);
+    let src_paths = input.source[0].clone();
+    let src_prefixes = input.source[1].clone();
+    let dst = input.target[0].clone();
 
-    match mork_api_client.dispatch(request).await {
-        Ok(_) => Ok(Json(true)),
-        Err(e) => Err(e),
+    if !token.permission_read || !token.permission_write {
+        return Err(Status::Unauthorized);
     }
+    if !restriction_impl::ns_is_within(&token.namespace, &src_paths)
+        || !restriction_impl::ns_is_within(&token.namespace, &src_prefixes)
+        || !restriction_impl::ns_is_within(&token.namespace, &dst)
+    {
+        return Err(Status::Unauthorized);
+    }
+
+    let mork_api_client = MorkApiClient::new();
+
+    let export_all = |ns: &str| {
+        ExportRequest::new()
+            .namespace(PathBuf::from(restriction_impl::normalize_ns_for_mork(ns)))
+            .pattern("$x".to_string())
+            .template("$x".to_string())
+            .format(ExportFormat::Metta)
+    };
+
+    let prefixes_text = mork_api_client.dispatch(export_all(&src_prefixes)).await?;
+    let paths_text = mork_api_client.dispatch(export_all(&src_paths)).await?;
+
+    let mut trie = restriction_impl::TrieNode::default();
+    for sexpr in restriction_impl::extract_balanced_sexprs(&prefixes_text) {
+        if let Some(parts) = restriction_impl::parse_flat_list(&sexpr) {
+            if parts.first().map(|s| s.as_str()) == Some("prefix") && parts.len() >= 2 {
+                trie.insert(&parts[1..]);
+            }
+        }
+    }
+
+    let mut survivors: Vec<String> = Vec::new();
+    for sexpr in restriction_impl::extract_balanced_sexprs(&paths_text) {
+        if let Some(parts) = restriction_impl::parse_flat_list(&sexpr) {
+            if parts.first().map(|s| s.as_str()) == Some("path") && parts.len() >= 2 {
+                let tokens = parts[1..].to_vec();
+                if trie.has_any_prefix(&tokens) {
+                    survivors.push(sexpr);
+                }
+            }
+        }
+    }
+
+    if survivors.is_empty() {
+        return Ok(Json(true));
+    }
+
+    let data = format!("{}\n", survivors.join("\n"));
+    let upload = UploadRequest::new()
+        .namespace(PathBuf::from(restriction_impl::normalize_ns_for_mork(&dst)))
+        .pattern("$x".to_string())
+        .template("$x".to_string())
+        .data(data);
+
+    let _ = mork_api_client.dispatch(upload).await?;
+    Ok(Json(true))
 }
 
 #[post("/spaces/union", data = "<operation_input>")]
