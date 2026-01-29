@@ -64,7 +64,8 @@ export const executeRestriction = async (
   if (patterns.length !== 2) {
     showToast({
       title: "Invalid Input",
-      description: "Restriction needs exactly two patterns (paths and prefixes).",
+      description:
+        "Restriction needs exactly two patterns (paths and prefixes).",
       variant: "destructive",
     });
     return;
@@ -80,7 +81,8 @@ export const executeRestriction = async (
 
   // Normalize values only; keep namespace as arrays (backend expects sequence)
   const patternValues = patterns.map((p) => (p.value || "").trim());
-  const firstTemplate = templates.find((t) => (t.value || "").trim().length > 0) || templates[0];
+  const firstTemplate =
+    templates.find((t) => (t.value || "").trim().length > 0) || templates[0];
   const templateValue = (firstTemplate.value || "").trim();
 
   if (!patternValues.every((v) => v.length > 0) || templateValue.length === 0) {
@@ -111,13 +113,21 @@ export const executeRestriction = async (
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        patterns: patterns.map((p, i) => ({ namespace: p.namespace, pattern: patternValues[i] })),
-        templates: [{ namespace: firstTemplate.namespace, template: templateValue }],
+        patterns: patterns.map((p, i) => ({
+          namespace: p.namespace,
+          pattern: patternValues[i],
+        })),
+        templates: [
+          { namespace: firstTemplate.namespace, template: templateValue },
+        ],
       }),
     });
 
     if (ok) {
-      showToast({ title: "Restriction Initiated", description: "Waiting for results..." });
+      showToast({
+        title: "Restriction Initiated",
+        description: "Waiting for results...",
+      });
       startPolling(tgt);
     } else {
       showToast({
@@ -129,10 +139,12 @@ export const executeRestriction = async (
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";
-    showToast({ title: "Error", description: errorMessage, variant: "destructive" });
+    showToast({
+      title: "Error",
+      description: errorMessage,
+      variant: "destructive",
+    });
   } finally {
     setIsLoading(false);
   }
 };
-
-

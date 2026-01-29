@@ -32,7 +32,9 @@ async fn test_restriction_success() {
         then.status(200).body("Transform successful");
     });
 
-    let client = Client::tracked(rocket()).await.expect("valid rocket instance");
+    let client = Client::tracked(rocket())
+        .await
+        .expect("valid rocket instance");
 
     let body = serde_json::to_string(&json!({
         "patterns": [
@@ -42,7 +44,8 @@ async fn test_restriction_success() {
         "templates": [
             { "namespace": ["test", "target"], "template": "(output $a $b $v)" }
         ]
-    })).unwrap();
+    }))
+    .unwrap();
 
     let response = client
         .post("/spaces/restriction")
@@ -68,7 +71,9 @@ async fn test_restriction_unauthorized_namespace() {
     common::setup(&server.base_url());
 
     let token = common::create_test_token("/test/", true, true);
-    let client = Client::tracked(rocket()).await.expect("valid rocket instance");
+    let client = Client::tracked(rocket())
+        .await
+        .expect("valid rocket instance");
 
     let body = serde_json::to_string(&json!({
         "patterns": [
@@ -78,7 +83,8 @@ async fn test_restriction_unauthorized_namespace() {
         "templates": [
             { "namespace": ["other", "target"], "template": "(output $a $b $v)" }
         ]
-    })).unwrap();
+    }))
+    .unwrap();
 
     let response = client
         .post("/spaces/restriction")
@@ -102,7 +108,9 @@ async fn test_restriction_bad_request_wrong_sources() {
     common::setup(&server.base_url());
 
     let token = common::create_test_token("/test/", true, true);
-    let client = Client::tracked(rocket()).await.expect("valid rocket instance");
+    let client = Client::tracked(rocket())
+        .await
+        .expect("valid rocket instance");
 
     // Only one source -> BadRequest
     let body = serde_json::to_string(&json!({
@@ -112,7 +120,8 @@ async fn test_restriction_bad_request_wrong_sources() {
         "templates": [
             { "namespace": ["test", "target"], "template": "(output $a $b $v)" }
         ]
-    })).unwrap();
+    }))
+    .unwrap();
 
     let response = client
         .post("/spaces/restriction")

@@ -1,13 +1,27 @@
 import { For } from "solid-js";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "~/components/ui/Card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "~/components/ui/Card";
 import NameSpace from "~/pages/index/components/NameSpace";
 import { TextField, TextFieldInput } from "~/components/ui/TextField";
 
-interface Item { id: string; namespace: string[]; value: string; }
+interface Item {
+  id: string;
+  namespace: string[];
+  value: string;
+}
 
 interface RestrictionInputProps {
   items: Item[]; // expect exactly 2: paths, prefixes
-  updateItem: (id: string, field: "namespace" | "value", value: string | string[]) => void;
+  updateItem: (
+    id: string,
+    field: "namespace" | "value",
+    value: string | string[]
+  ) => void;
   accentColor: string;
   rootToken: boolean;
   tokenRootNamespace: () => string[];
@@ -23,7 +37,8 @@ export function RestrictionInput(props: RestrictionInputProps) {
           <CardTitle>Sources</CardTitle>
         </div>
         <CardDescription>
-          First row: path pattern (e.g. (path $a $b $v)). Second row: prefix pattern (e.g. (prefix $a $b)).
+          First row: path pattern (e.g. (path $a $b $v)). Second row: prefix
+          pattern (e.g. (prefix $a $b)).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -33,11 +48,15 @@ export function RestrictionInput(props: RestrictionInputProps) {
               <div class="flex gap-2 bg-neutral-800 p-3">
                 <div class="flex-1 flex flex-col gap-2">
                   <div class="text-xs text-muted-foreground">
-                    {i() === 0 ? "Path facts namespace" : "Prefix facts namespace"}
+                    {i() === 0
+                      ? "Path facts namespace"
+                      : "Prefix facts namespace"}
                   </div>
                   <NameSpace
                     namespace={item.namespace}
-                    setNamespace={(ns) => props.updateItem(item.id, "namespace", ns)}
+                    setNamespace={(ns) =>
+                      props.updateItem(item.id, "namespace", ns)
+                    }
                     rootToken={props.rootToken}
                     tokenRootNamespace={props.tokenRootNamespace}
                     getAllTokens={props.getAllTokens}
