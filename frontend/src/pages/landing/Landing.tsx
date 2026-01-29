@@ -335,9 +335,7 @@ export default function Landing() {
                   )}
                 </div>
 
-                {detectedMorkProcess() &&
-                isMorkRunning() &&
-                !overrideMork() ? (
+                {detectedMorkProcess() && isMorkRunning() && !overrideMork() ? (
                   <div class="rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
                     <div class="flex items-center gap-3">
                       <div class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
