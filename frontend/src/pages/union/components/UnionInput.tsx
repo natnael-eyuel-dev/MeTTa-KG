@@ -1,6 +1,5 @@
 import { For } from "solid-js";
 import { Button } from "~/components/ui/Button";
-import { TextField, TextFieldInput } from "~/components/ui/TextField";
 import {
   Card,
   CardHeader,
@@ -17,34 +16,29 @@ type Token = {
   description: string;
 };
 
-interface Item {
+export interface Item {
   id: string;
   namespace: string[];
-  value: string;
 }
 
-interface TransformInputProps {
+interface UnionInputProps {
   type: "patterns" | "templates";
   items: Item[];
   addItem: () => void;
   removeItem: (id: string) => void;
-  updateItem: (
-    id: string,
-    field: "namespace" | "value",
-    value: string | string[]
-  ) => void;
+  updateItem: (id: string, field: "namespace", value: string[]) => void;
   accentColor: string;
   rootToken: boolean;
   tokenRootNamespace: () => string[];
   getAllTokens: () => Promise<Token[]>;
 }
 
-export function TransformInput(props: TransformInputProps) {
+export function UnionInput(props: UnionInputProps) {
   const title = props.type === "patterns" ? "Patterns" : "Templates";
   const description =
     props.type === "patterns"
       ? "Define patterns to match against"
-      : "Define templates for transformations";
+      : "Define templates for unification";
 
   return (
     <Card class={`border-l-4 border-l-${props.accentColor}`}>
@@ -72,20 +66,6 @@ export function TransformInput(props: TransformInputProps) {
                     tokenRootNamespace={props.tokenRootNamespace}
                     getAllTokens={props.getAllTokens}
                   />
-                  <TextField class="flex-1">
-                    <TextFieldInput
-                      value={item.value}
-                      onInput={(e) =>
-                        props.updateItem(
-                          item.id,
-                          "value",
-                          e.currentTarget.value
-                        )
-                      }
-                      placeholder="Pattern/Template value"
-                      class="text-sm font-mono resize-none"
-                    />
-                  </TextField>
                 </div>
                 <Button
                   variant="ghost"
@@ -100,15 +80,17 @@ export function TransformInput(props: TransformInputProps) {
             )}
           </For>
           <hr class="my-4" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={props.addItem}
-            class="w-full"
-          >
-            <Plus class="w-4 h-4 mr-2" />
-            Add {props.type === "patterns" ? "Pattern" : "Template"}
-          </Button>
+          {props.type === "patterns" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={props.addItem}
+              class="w-full"
+            >
+              <Plus class="w-4 h-4 mr-2" />
+              Add Patterns
+            </Button>
+          ) : null}
         </div>
       </CardContent>
     </Card>

@@ -1,6 +1,5 @@
 import { For } from "solid-js";
 import { Button } from "~/components/ui/Button";
-import { TextField, TextFieldInput } from "~/components/ui/TextField";
 import {
   Card,
   CardHeader,
@@ -17,34 +16,29 @@ type Token = {
   description: string;
 };
 
-interface Item {
+export interface Item {
   id: string;
   namespace: string[];
-  value: string;
 }
 
-interface TransformInputProps {
-  type: "patterns" | "templates";
+interface CompositionInputProps {
+  type: "sources" | "target";
   items: Item[];
   addItem: () => void;
   removeItem: (id: string) => void;
-  updateItem: (
-    id: string,
-    field: "namespace" | "value",
-    value: string | string[]
-  ) => void;
+  updateItem: (id: string, field: "namespace", value: string[]) => void;
   accentColor: string;
   rootToken: boolean;
   tokenRootNamespace: () => string[];
   getAllTokens: () => Promise<Token[]>;
 }
 
-export function TransformInput(props: TransformInputProps) {
-  const title = props.type === "patterns" ? "Patterns" : "Templates";
+export function CompositionInput(props: CompositionInputProps) {
+  const title = props.type === "sources" ? "Sources" : "Target";
   const description =
-    props.type === "patterns"
-      ? "Define patterns to match against"
-      : "Define templates for transformations";
+    props.type === "sources"
+      ? "Define source namespaces to compose"
+      : "Define the target namespace for composition";
 
   return (
     <Card class={`border-l-4 border-l-${props.accentColor}`}>
@@ -72,20 +66,6 @@ export function TransformInput(props: TransformInputProps) {
                     tokenRootNamespace={props.tokenRootNamespace}
                     getAllTokens={props.getAllTokens}
                   />
-                  <TextField class="flex-1">
-                    <TextFieldInput
-                      value={item.value}
-                      onInput={(e) =>
-                        props.updateItem(
-                          item.id,
-                          "value",
-                          e.currentTarget.value
-                        )
-                      }
-                      placeholder="Pattern/Template value"
-                      class="text-sm font-mono resize-none"
-                    />
-                  </TextField>
                 </div>
                 <Button
                   variant="ghost"
@@ -100,15 +80,17 @@ export function TransformInput(props: TransformInputProps) {
             )}
           </For>
           <hr class="my-4" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={props.addItem}
-            class="w-full"
-          >
-            <Plus class="w-4 h-4 mr-2" />
-            Add {props.type === "patterns" ? "Pattern" : "Template"}
-          </Button>
+          {props.type === "sources" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={props.addItem}
+              class="w-full"
+            >
+              <Plus class="w-4 h-4 mr-2" />
+              Add Source
+            </Button>
+          ) : null}
         </div>
       </CardContent>
     </Card>

@@ -54,6 +54,9 @@ export async function request<T>(
   const response = await fetch(finalUrl, { ...options, headers });
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Unauthorized");
+    }
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
       const errorData = await response.json();
@@ -78,12 +81,52 @@ export async function request<T>(
 export const transform = (
   input: Mm2InputMultiWithNamespace
 ): Promise<boolean> => {
-  console.log("transform input", input);
   return request<boolean>("/spaces/transform", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+};
+
+export const union = (unification: Mm2Input) => {
+  const patterns = Array.isArray(unification.pattern)
+    ? unification.pattern
+    : [unification.pattern];
+  const templates = Array.isArray(unification.template)
+    ? unification.template
+    : [unification.template];
+
+  return request<boolean>(`/spaces/union`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source: patterns, target: templates }),
+  })
+    .then((result) => {
+      return result;
+    })
+    .catch((error) => {
+      throw error;
+    });
+};
+
+export const composition = (compositionInput: {
+  source: string[];
+  target: string[];
+}) => {
+  return request<boolean>(`/spaces/composition`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source: compositionInput.source,
+      target: compositionInput.target,
+    }),
+  })
+    .then((result) => {
+      return result;
+    })
+    .catch((error) => {
+      throw error;
+    });
 };
 
 export const readSpace = (path: string) => {
@@ -179,7 +222,8 @@ export async function isPathClear(path: string): Promise<boolean> {
 export async function importData(
   type: string,
   data: any /* eslint-disable-line @typescript-eslint/no-explicit-any */ = null,
-  format: string = "metta"
+  format: string = "metta",
+  path: string
 ): Promise<ImportDataResponse> {
   try {
     switch (type) {
@@ -199,10 +243,37 @@ export async function importData(
       }
 
       case "file":
-        return {
-          status: "error",
-          message: "File upload not implemented yet",
-        };
+        try {
+          const file: File = data.get("file");
+
+          if (!file) {
+            return { status: "error", message: "No file provided" };
+          }
+
+          const text = await file.text();
+          let contentType = "text/plain";
+          if (format === "json") {
+            contentType = "application/json";
+          } else if (format === "csv") {
+            contentType = "text/csv";
+          }
+          const resp = await request<string>(`/spaces/upload${path}`, {
+            method: "POST",
+            headers: { "Content-Type": contentType },
+            body: text,
+          });
+
+          return {
+            status: "success",
+            data: resp,
+            message: "File imported successfully",
+          };
+        } catch (err) {
+          return {
+            status: "error",
+            message: err instanceof Error ? err.message : String(err),
+          };
+        }
 
       default:
         return {
@@ -230,10 +301,13 @@ export const uploadTextToSpace = (
 };
 
 export const importSpace = (path: string, uri: string) => {
-  return request<boolean>(`/spaces/import${path}?uri=${uri}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
+  return request<boolean>(
+    `/spaces/import/${path.replace(/^\/+/, "")}?uri=${encodeURIComponent(uri)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }
+  );
 };
 
 export const fetchTokens = async (token: string | null): Promise<Token[]> => {
@@ -355,8 +429,8 @@ export const exportSpace = async (
   });
 };
 
-export const clearSpace = (path: string) => {
-  return request<boolean>(`/spaces/clear${path}?expr=$x`, {
+export const clearSpace = (expression: string, path: string) => {
+  return request<boolean>(`/spaces/clear${path}?expr=${expression}`, {
     method: "POST",
   });
 };

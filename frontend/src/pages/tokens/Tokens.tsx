@@ -56,6 +56,10 @@ export const TokensPage: Component = () => {
       return currentNs === trimTrailingSlash(tokenNs);
     });
   };
+
+  const shouldShowContent = () =>
+    rootToken() && !tokens.loading && tokens().length > 0;
+
   return (
     <div class="ml-10 mt-8 space-y-8">
       <CommandCard
@@ -65,7 +69,7 @@ export const TokensPage: Component = () => {
         <RootTokenForm initialToken={rootToken()} onLoad={setRootToken} />
       </CommandCard>
 
-      <Show when={rootToken()}>
+      <Show when={shouldShowContent()}>
         <CommandCard
           title="Create New Token"
           description="Define a namespace, description, and permissions for a new token."

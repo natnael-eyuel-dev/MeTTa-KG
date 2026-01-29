@@ -394,6 +394,9 @@ fn build_rocket(cfg: &AppConfig) -> Rocket<Build> {
                 routes::spaces::explore,
                 routes::spaces::export,
                 routes::spaces::clear,
+                routes::spaces::composition,
+                routes::spaces::intersection,
+                routes::spaces::union,
             ],
         )
         .attach(cors.clone())
