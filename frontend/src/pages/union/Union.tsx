@@ -19,7 +19,8 @@ import {
   stopPolling,
   setOperationInput,
 } from "./lib";
-import { Copy, Check } from "lucide-solid";
+import Copy from "lucide-solid/icons/copy";
+import Check from "lucide-solid/icons/check";
 import {
   Item,
   UnionInput as UnionInputComponent,
@@ -150,7 +151,7 @@ const UnionPage: Component = () => {
                 removeItem={removePattern}
                 updateItem={updatePattern}
                 accentColor="primary"
-                rootToken={rootToken()}
+                rootToken={rootToken() ? true : false}
                 tokenRootNamespace={tokenRootNamespace}
                 getAllTokens={getAllTokens}
               />
@@ -162,7 +163,7 @@ const UnionPage: Component = () => {
                 removeItem={removeTemplate}
                 updateItem={updateTemplate}
                 accentColor="primary"
-                rootToken={rootToken()}
+                rootToken={rootToken() ? true : false}
                 tokenRootNamespace={tokenRootNamespace}
                 getAllTokens={getAllTokens}
               />

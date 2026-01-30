@@ -1,7 +1,7 @@
-use api::mork_api::{Mm2Cell, Namespace};
-use api::rocket;
-use api::routes::spaces::Mm2InputMultiWithNamespace;
 use httpmock::prelude::*;
+use metta_kg::mork_api::{Mm2Cell, Namespace};
+use metta_kg::rocket;
+use metta_kg::routes::spaces::Mm2InputMultiWithNamespace;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;

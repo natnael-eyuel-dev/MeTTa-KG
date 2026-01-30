@@ -1,9 +1,10 @@
-use api::rocket;
 use httpmock::prelude::*;
 use httpmock::Regex;
+use metta_kg::rocket;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use serial_test::serial;
+use std::env;
 
 #[path = "common.rs"]
 mod common;
@@ -28,13 +29,20 @@ async fn test_import_success() {
         then.status(200).body("Import successful");
     });
 
-    let client = Client::tracked(rocket())
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    // Create client
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
     let response = client
         .post(format!(
-            "/spaces/import/test/space?uri={}",
+            "/api/spaces/import/test/space?uri={}",
             urlencoding::encode("http://example.com/data")
         ))
         .header(Header::new("authorization", token.code.clone()))
@@ -60,14 +68,21 @@ async fn test_non_existent_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let client = Client::tracked(rocket())
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    // Create client
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
     // Path does not start with /test/
     let response = client
         .post(format!(
-            "/spaces/import/other/space?uri={}",
+            "/api/spaces/import/other/space?uri={}",
             urlencoding::encode("http://example.com/data")
         ))
         .header(Header::new("authorization", token.code.clone()))
@@ -98,13 +113,20 @@ async fn test_existing_empty_namespace() {
         then.status(200).body("Import successful");
     });
 
-    let client = Client::tracked(rocket())
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    // Create client
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
     let response = client
         .post(format!(
-            "/spaces/import/test/space?uri={}",
+            "/api/spaces/import/test/space?uri={}",
             urlencoding::encode("http://example.com/data")
         ))
         .header(Header::new("authorization", token.code.clone()))
@@ -137,13 +159,20 @@ async fn test_non_empty_namespace() {
         then.status(200).body("Import successful");
     });
 
-    let client = Client::tracked(rocket())
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    // Create client
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
     let response = client
         .post(format!(
-            "/spaces/import/test/space?uri={}",
+            "/api/spaces/import/test/space?uri={}",
             urlencoding::encode("http://example.com/data")
         ))
         .header(Header::new("authorization", token.code.clone()))
@@ -176,14 +205,21 @@ async fn test_different_namespaces() {
         then.status(200).body("Import successful");
     });
 
-    let client = Client::tracked(rocket())
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    // Create client
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
     // Import to ns1
     let response1 = client
         .post(format!(
-            "/spaces/import/ns1/space?uri={}",
+            "/api/spaces/import/ns1/space?uri={}",
             urlencoding::encode("http://example.com/data")
         ))
         .header(Header::new("authorization", token1.code.clone()))
@@ -194,7 +230,7 @@ async fn test_different_namespaces() {
     // Import to ns2
     let response2 = client
         .post(format!(
-            "/spaces/import/ns2/space?uri={}",
+            "/api/spaces/import/ns2/space?uri={}",
             urlencoding::encode("http://example.com/data")
         ))
         .header(Header::new("authorization", token2.code.clone()))
@@ -217,14 +253,21 @@ async fn test_namespace_mismatch() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let client = Client::tracked(rocket())
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    // Create client
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
     // Path does not start with /test/
     let response = client
         .post(format!(
-            "/spaces/import/other/space?uri={}",
+            "/api/spaces/import/other/space?uri={}",
             urlencoding::encode("http://example.com/data")
         ))
         .header(Header::new("authorization", token.code.clone()))

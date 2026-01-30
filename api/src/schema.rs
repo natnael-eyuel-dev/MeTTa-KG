@@ -1,5 +1,23 @@
 // @generated automatically by Diesel CLI.
 
+#[cfg(feature = "sqlite")]
+diesel::table! {
+    tokens (id) {
+        id -> Integer,
+        code -> Text,
+        description -> Text,
+        namespace -> Text,
+        creation_timestamp -> Timestamp,
+        permission_read -> Bool,
+        permission_write -> Bool,
+        permission_share_share -> Bool,
+        permission_share_read -> Bool,
+        permission_share_write -> Bool,
+        parent -> Nullable<Integer>,
+    }
+}
+
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 diesel::table! {
     tokens (id) {
         id -> Int4,
