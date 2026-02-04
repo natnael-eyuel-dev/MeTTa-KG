@@ -9,102 +9,93 @@ import {
   CardTitle,
   CardDescription,
 } from "~/components/ui/Card";
-import { TransformInput as TransformInputComponent } from "~/pages/transform/components/TransformInput";
 import { RestrictionInput } from "./components/RestrictionInput";
 import { getAllTokens } from "~/lib/api";
-import { rootToken, tokenRootNamespace, namespace } from "~/lib/state";
+import { rootToken, tokenRootNamespace } from "~/lib/state";
 import { Copy, Check } from "lucide-solid";
 import { isLoading, isPolling, executeRestriction, stopPolling } from "./lib";
 
 interface Item {
   id: string;
   namespace: string[];
-  value: string;
 }
 
 const RestrictionPage: Component = () => {
   const [state, setState] = createStore({
     patterns: [
-      { id: createUniqueId(), namespace: [...namespace()], value: "" },
-      { id: createUniqueId(), namespace: [...namespace()], value: "" },
+      { id: createUniqueId(), namespace: [""] },
+      { id: createUniqueId(), namespace: [""] },
     ],
-    templates: [
-      { id: createUniqueId(), namespace: [...namespace()], value: "" },
-    ],
+    templates: [{ id: createUniqueId(), namespace: [""] }],
     copied: false,
   });
 
   onCleanup(stopPolling);
 
-  const updatePattern = (
-    id: string,
-    field: "namespace" | "value",
-    value: string | string[]
-  ) => {
+  const updatePattern = (id: string, value: string[]) => {
     setState(
       "patterns",
       produce((patterns: Item[]) => {
         const item = patterns.find((p) => p.id === id);
         if (item) {
-          if (field === "namespace") item.namespace = value as string[];
-          else item.value = value as string;
+          item.namespace = value;
         }
       })
     );
   };
 
-  const addTemplate = () => {
-    setState("templates", (prev) => [
-      ...prev,
-      { id: createUniqueId(), namespace: [""], value: "" },
-    ]);
-  };
-  const removeTemplate = (id: string) => {
-    setState("templates", (prev) => prev.filter((t) => t.id !== id));
-  };
-  const updateTemplate = (
-    id: string,
-    field: "namespace" | "value",
-    value: string | string[]
-  ) => {
+  const updateTemplate = (id: string, value: string[]) => {
     setState(
       "templates",
       produce((templates: Item[]) => {
         const item = templates.find((t) => t.id === id);
         if (item) {
-          if (field === "namespace") item.namespace = value as string[];
-          else item.value = value as string;
+          item.namespace = value;
         }
       })
     );
   };
 
   const canSubmit = () => {
-    // Need both canonical patterns and a template output expression
-    const patternsOk = state.patterns.every(
-      (p: Item) => (p.value || "").trim().length > 0
-    );
-    const templateOk = state.templates.some(
-      (t: Item) => (t.value || "").trim().length > 0
-    );
-    return patternsOk && templateOk;
+    // Restriction requires exactly 2 sources (paths, prefixes) and 1 target.
+    const hasPatternValue = state.patterns.length === 2;
+    const hasTemplateValue = state.templates.length === 1;
+    return hasPatternValue && hasTemplateValue;
   };
 
-  const buildTransformPreview = () => {
-    const wrap = (v: string) => {
-      const trimmed = v.trim();
-      if (!trimmed) return "()";
-      return trimmed.startsWith("(") ? trimmed : `(${trimmed})`;
+  const buildTransformPreview = (patterns: Item[], templates: Item[]) => {
+    const wrapNs = (ns: string[], placeholder: string, inner: string) => {
+      const parts = ns.filter(Boolean);
+      if (parts.length === 0) {
+        return `(${placeholder} ${inner})`;
+      }
+      return parts.reduceRight((acc, part) => `(${part} ${acc})`, inner);
     };
-    const patternParts = state.patterns.map((p: Item) => wrap(p.value || ""));
-    const templateParts = state.templates.map((t: Item) => wrap(t.value || ""));
-    const patternsExpr = `(,  ${patternParts.join(" ")} )`;
-    const templatesExpr = `(, ${templateParts.join(" ")} )`;
-    return `(transform\n    ${patternsExpr}\n    ${templatesExpr}\n)`;
+
+    const pathsExpr = wrapNs(
+      patterns[0]?.namespace || [],
+      "<paths>",
+      "(path $a $b $v)"
+    );
+    const prefixesExpr = wrapNs(
+      patterns[1]?.namespace || [],
+      "<prefixes>",
+      "(prefix $a $b)"
+    );
+    const outExpr = wrapNs(
+      templates[0]?.namespace || [],
+      "<out>",
+      "(path $a $b $v)"
+    );
+
+    return `(transform
+    (, ${pathsExpr} ${prefixesExpr})
+    (, ${outExpr})
+)`;
   };
 
   const copyExpression = () => {
-    const expr = buildTransformPreview();
+    const expr = buildTransformPreview(state.patterns, state.templates);
     navigator.clipboard.writeText(expr);
     setState("copied", true);
     setTimeout(() => setState("copied", false), 2000);
@@ -112,8 +103,8 @@ const RestrictionPage: Component = () => {
 
   const handleRestriction = async () => {
     await executeRestriction(
-      state.patterns as unknown as { namespace: string[]; value: string }[],
-      state.templates as unknown as { namespace: string[]; value: string }[]
+      state.patterns.map((p: Item) => p.namespace),
+      state.templates[0]?.namespace || [""]
     );
   };
 
@@ -126,25 +117,25 @@ const RestrictionPage: Component = () => {
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div class="lg:col-span-2 space-y-6">
             <RestrictionInput
+              type="patterns"
               items={state.patterns as Item[]}
               updateItem={updatePattern}
               accentColor="primary"
               rootToken={!!rootToken()}
               tokenRootNamespace={tokenRootNamespace}
               getAllTokens={getAllTokens}
+              description="Select the paths space (X) and prefixes space (Y)"
             />
 
-            <TransformInputComponent
+            <RestrictionInput
               type="templates"
               items={state.templates as Item[]}
-              addItem={addTemplate}
-              removeItem={removeTemplate}
               updateItem={updateTemplate}
               accentColor="primary"
               rootToken={!!rootToken()}
               tokenRootNamespace={tokenRootNamespace}
               getAllTokens={getAllTokens}
-              description="Template for surviving path entries"
+              description="Select the output target namespace"
             />
           </div>
 
@@ -158,7 +149,7 @@ const RestrictionPage: Component = () => {
               </CardHeader>
               <CardContent>
                 <pre class="text-sm font-mono bg-muted p-3 rounded overflow-auto">
-                  {buildTransformPreview()}
+                  {buildTransformPreview(state.patterns, state.templates)}
                 </pre>
                 <Button
                   variant="default"
@@ -176,41 +167,42 @@ const RestrictionPage: Component = () => {
                 <div class="mt-4 p-3 bg-muted/50 rounded text-sm text-muted-foreground">
                   Restriction runs server-side using selected namespaces.
                 </div>
-                <Button
-                  class="w-full mt-4"
-                  disabled={!canSubmit() || isLoading() || isPolling()}
-                  onClick={handleRestriction}
-                >
-                  <Show when={isLoading() || isPolling()}>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      class="animate-spin mr-2 h-4 w-4"
-                    >
-                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                    </svg>
-                  </Show>
-                  <Show
-                    when={isLoading()}
-                    fallback={
-                      <Show when={isPolling()} fallback={"Run Restriction"}>
-                        Waiting for results...
-                      </Show>
-                    }
-                  >
-                    Processing...
-                  </Show>
-                </Button>
               </CardContent>
             </Card>
           </div>
+
+          <Button
+            class="w-full mt-4"
+            disabled={!canSubmit() || isLoading() || isPolling()}
+            onClick={handleRestriction}
+          >
+            <Show when={isLoading() || isPolling()}>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="animate-spin mr-2 h-4 w-4"
+              >
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            </Show>
+            <Show
+              when={isLoading()}
+              fallback={
+                <Show when={isPolling()} fallback={"Run Restriction"}>
+                  Waiting for results...
+                </Show>
+              }
+            >
+              Processing...
+            </Show>
+          </Button>
         </div>
       </CommandCard>
     </div>
