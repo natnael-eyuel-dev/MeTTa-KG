@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import {
   Card,
   CardHeader,
@@ -7,39 +7,39 @@ import {
   CardContent,
 } from "~/components/ui/Card";
 import NameSpace from "~/pages/index/components/NameSpace";
-import { TextField, TextFieldInput } from "~/components/ui/TextField";
 
-interface Item {
+type Token = {
+  namespace: string;
+  description: string;
+};
+
+export interface Item {
   id: string;
   namespace: string[];
-  value: string;
 }
 
 interface RestrictionInputProps {
-  items: Item[]; // expect exactly 2: paths, prefixes
-  updateItem: (
-    id: string,
-    field: "namespace" | "value",
-    value: string | string[]
-  ) => void;
+  type: "patterns" | "templates";
+  items: Item[]; // patterns: 2 items (paths, prefixes); templates: 1 item (target)
+  updateItem: (id: string, ns: string[]) => void;
   accentColor: string;
   rootToken: boolean;
   tokenRootNamespace: () => string[];
-  getAllTokens: () => Promise<{ namespace: string; description: string }[]>;
+  getAllTokens: () => Promise<Token[]>;
+  description: string;
 }
 
 export function RestrictionInput(props: RestrictionInputProps) {
+  const title = props.type === "patterns" ? "Patterns" : "Templates";
+
   return (
     <Card class={`border-l-4 border-l-${props.accentColor}`}>
       <CardHeader>
         <div class="flex items-center">
           <div class={`w-2 h-2 bg-${props.accentColor} rounded-full mr-2`} />
-          <CardTitle>Sources</CardTitle>
+          <CardTitle>{title}</CardTitle>
         </div>
-        <CardDescription>
-          First row: path pattern (e.g. (path $a $b $v)). Second row: prefix
-          pattern (e.g. (prefix $a $b)).
-        </CardDescription>
+        <CardDescription>{props.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <div class="space-y-2">
@@ -47,36 +47,25 @@ export function RestrictionInput(props: RestrictionInputProps) {
             {(item, i) => (
               <div class="flex gap-2 bg-neutral-800 p-3">
                 <div class="flex-1 flex flex-col gap-2">
-                  <div class="text-xs text-muted-foreground">
-                    {i() === 0
-                      ? "Path facts namespace"
-                      : "Prefix facts namespace"}
-                  </div>
+                  <Show when={props.type === "patterns"}>
+                    <div class="text-xs text-muted-foreground">
+                      {i() === 0
+                        ? "Paths (X): (path ...)"
+                        : "Prefixes (Y): (prefix ...)"}
+                    </div>
+                  </Show>
+                  <Show when={props.type === "templates"}>
+                    <div class="text-xs text-muted-foreground">
+                      Target (Out): surviving (path ...) facts
+                    </div>
+                  </Show>
                   <NameSpace
                     namespace={item.namespace}
-                    setNamespace={(ns) =>
-                      props.updateItem(item.id, "namespace", ns)
-                    }
+                    setNamespace={(ns) => props.updateItem(item.id, ns)}
                     rootToken={props.rootToken}
                     tokenRootNamespace={props.tokenRootNamespace}
                     getAllTokens={props.getAllTokens}
                   />
-                  <TextField>
-                    <TextFieldInput
-                      value={item.value}
-                      onInput={(e) =>
-                        props.updateItem(
-                          item.id,
-                          "value",
-                          e.currentTarget.value
-                        )
-                      }
-                      class="text-xs font-mono"
-                      placeholder={
-                        i() === 0 ? "(path $a $b $v)" : "(prefix $a $b)"
-                      }
-                    />
-                  </TextField>
                 </div>
               </div>
             )}
