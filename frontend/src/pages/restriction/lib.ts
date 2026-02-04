@@ -46,11 +46,9 @@ const toPath = (ns: string[]) => {
   return p.endsWith("/") ? p : `${p}/`;
 };
 
-type NsVal = { namespace: string[]; value: string };
-
 export const executeRestriction = async (
-  patterns: NsVal[], // expect exactly 2 entries
-  templates: NsVal[] // expect at least 1; restriction uses exactly 1
+  sources: string[][], // expect exactly 2 entries: [pathsNs, prefixesNs]
+  target: string[] // output namespace
 ) => {
   const current = (() => {
     const arr = namespace();
@@ -61,16 +59,22 @@ export const executeRestriction = async (
   })();
 
   // Validate counts
-  if (patterns.length !== 2) {
+  if (sources.length !== 2) {
     showToast({
       title: "Invalid Input",
       description:
-        "Restriction needs exactly two patterns (paths and prefixes).",
+        "Restriction needs exactly two source namespaces (paths and prefixes).",
       variant: "destructive",
     });
     return;
   }
-  if (templates.length < 1) {
+  const src = sources
+    .map(toPath)
+    .map((s) => s || current)
+    .filter(Boolean);
+  const tgt = toPath(target) || current;
+
+  if (src.length !== 2 || !tgt) {
     showToast({
       title: "Invalid Input",
       description: "Provide one template for the output namespace.",
@@ -78,22 +82,6 @@ export const executeRestriction = async (
     });
     return;
   }
-
-  // Normalize values only; keep namespace as arrays (backend expects sequence)
-  const patternValues = patterns.map((p) => (p.value || "").trim());
-  const firstTemplate =
-    templates.find((t) => (t.value || "").trim().length > 0) || templates[0];
-  const templateValue = (firstTemplate.value || "").trim();
-
-  if (!patternValues.every((v) => v.length > 0) || templateValue.length === 0) {
-    showToast({
-      title: "Missing Values",
-      description: "Fill both pattern expressions and the template expression.",
-      variant: "destructive",
-    });
-    return;
-  }
-  const tgt = toPath(firstTemplate.namespace) || current;
 
   setIsLoading(true);
   stopPolling();
@@ -112,15 +100,7 @@ export const executeRestriction = async (
     const ok = await request<boolean>("/spaces/restriction", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        patterns: patterns.map((p, i) => ({
-          namespace: p.namespace,
-          pattern: patternValues[i],
-        })),
-        templates: [
-          { namespace: firstTemplate.namespace, template: templateValue },
-        ],
-      }),
+      body: JSON.stringify({ source: src, target: [tgt] }),
     });
 
     if (ok) {
