@@ -342,6 +342,10 @@ pub async fn restriction(
         fn normalize_ns(ns: &str) -> String {
             let trimmed = ns.trim();
             let trimmed = trimmed.strip_prefix('/').unwrap_or(trimmed);
+            // Root namespace should normalize to empty string so it is a prefix of all namespaces.
+            if trimmed.is_empty() {
+                return "".to_string();
+            }
             let mut s = trimmed.to_string();
             if !s.ends_with('/') {
                 s.push('/');
@@ -483,6 +487,13 @@ pub async fn restriction(
             }
         }
     }
+
+    // Ensure the target namespace matches the computed result exactly:
+    // always clear it first, then optionally upload survivors.
+    let clear_req = ClearRequest::new()
+        .namespace(PathBuf::from(restriction_impl::normalize_ns_for_mork(&dst)))
+        .expr("$x".to_string());
+    let _ = mork_api_client.dispatch(clear_req).await?;
 
     if survivors.is_empty() {
         return Ok(Json(true));
