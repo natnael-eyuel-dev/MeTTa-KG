@@ -58,6 +58,13 @@ async fn test_restriction_filters_paths_by_prefix() {
         then.status(200).body("Upload successful");
     });
 
+    // Restriction now clears the target before uploading survivors.
+    let clear_mock = server.mock(|when, then| {
+        when.method(GET)
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
+    });
+
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
@@ -78,6 +85,8 @@ async fn test_restriction_filters_paths_by_prefix() {
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await;
     assert_eq!(body.expect("response body"), "true");
+
+    assert_eq!(clear_mock.hits(), 1);
 
     common::teardown_database();
 }
@@ -121,6 +130,12 @@ async fn test_restriction_keeps_exact_match_path_when_prefix_equals_path() {
         then.status(200).body("Upload successful");
     });
 
+    let clear_mock = server.mock(|when, then| {
+        when.method(GET)
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
+    });
+
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
@@ -141,6 +156,8 @@ async fn test_restriction_keeps_exact_match_path_when_prefix_equals_path() {
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await;
     assert_eq!(body.expect("response body"), "true");
+
+    assert_eq!(clear_mock.hits(), 1);
 
     common::teardown_database();
 }
@@ -183,6 +200,13 @@ async fn test_restriction_empty_prefixes_writes_nothing() {
         then.status(200).body("Upload successful");
     });
 
+    // But it must still clear the target (empty result == empty target).
+    let clear_mock = server.mock(|when, then| {
+        when.method(GET)
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
+    });
+
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
@@ -205,6 +229,7 @@ async fn test_restriction_empty_prefixes_writes_nothing() {
     assert_eq!(body.expect("response body"), "true");
 
     assert_eq!(upload_mock.hits(), 0);
+    assert_eq!(clear_mock.hits(), 1);
 
     common::teardown_database();
 }
@@ -246,6 +271,13 @@ async fn test_restriction_non_commutative_swapped_sources_no_upload() {
         then.status(200).body("Upload successful");
     });
 
+    // Swapped sources produce an empty result, which still clears target.
+    let clear_mock = server.mock(|when, then| {
+        when.method(GET)
+            .path_matches(Regex::new(r"/clear/.*").unwrap());
+        then.status(200).body("Clear successful");
+    });
+
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
@@ -268,6 +300,7 @@ async fn test_restriction_non_commutative_swapped_sources_no_upload() {
     assert_eq!(body.expect("response body"), "true");
 
     assert_eq!(upload_mock.hits(), 0);
+    assert_eq!(clear_mock.hits(), 1);
 
     common::teardown_database();
 }
