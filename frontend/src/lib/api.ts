@@ -88,9 +88,10 @@ export const transform = (
   });
 };
 
-export const subspace = (
-  input: Mm2InputMultiWithNamespace
-): Promise<boolean> => {
+export const subspace = (input: {
+  source: string[];
+  target: string[];
+}): Promise<boolean> => {
   return request<boolean>("/spaces/subspace", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
