@@ -19,8 +19,8 @@ pub enum ExportFormat {
 /// # Examples
 ///
 /// ```
-/// use api::mork_api::Mm2Cell;
-/// use api::mork_api::Namespace;
+/// use metta_kg::mork_api::Mm2Cell;
+/// use metta_kg::mork_api::Namespace;
 ///
 /// let ns = Namespace::from_path_string("/parent/child/grandchild");
 /// let pattern = Mm2Cell::new_pattern("$x".to_string(), ns);

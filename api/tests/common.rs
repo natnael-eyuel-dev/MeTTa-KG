@@ -1,13 +1,23 @@
-use api::model::{Token, TokenInsert};
-use api::schema::tokens;
-use api::{db::establish_connection, MIGRATIONS};
 use chrono::Utc;
-use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel_migrations::MigrationHarness;
+use metta_kg::model::{Token, TokenInsert};
+use metta_kg::schema::tokens;
+use metta_kg::{db::establish_connection, MIGRATIONS};
 use std::env;
 
+#[cfg(feature = "sqlite")]
+use tempfile::TempDir;
+
+#[cfg(feature = "sqlite")]
+use std::sync::OnceLock;
+
+#[cfg(feature = "sqlite")]
+static SQLITE_TEMP_DIR: OnceLock<TempDir> = OnceLock::new();
+
+#[cfg(all(feature = "postgres", not(feature = "sqlite")))]
 pub fn create_test_database_if_not_exists() {
+    use diesel::pg::PgConnection;
     let postgres_url = "postgresql://metta-kg-admin:metta-kg-password@localhost/postgres";
     let mut conn = PgConnection::establish(postgres_url)
         .expect("Failed to connect to postgres database for creating test DB");
@@ -20,6 +30,11 @@ pub fn create_test_database_if_not_exists() {
         }
         Err(e) => panic!("Failed to create test database: {}", e),
     }
+}
+
+#[cfg(feature = "sqlite")]
+pub fn create_test_database_if_not_exists() {
+    // For SQLite, no need to create database, just ensure temp file is set
 }
 
 pub fn drop_tokens_table() {
@@ -39,8 +54,17 @@ pub fn teardown_database() {
 }
 
 pub fn is_database_running() -> bool {
-    let postgres_url = "postgresql://metta-kg-admin:metta-kg-password@localhost/postgres";
-    PgConnection::establish(postgres_url).is_ok()
+    #[cfg(all(feature = "postgres", not(feature = "sqlite")))]
+    {
+        use diesel::pg::PgConnection;
+        let postgres_url = "postgresql://metta-kg-admin:metta-kg-password@localhost/postgres";
+        PgConnection::establish(postgres_url).is_ok()
+    }
+
+    #[cfg(feature = "sqlite")]
+    {
+        true // SQLite is always "running" as it's file-based
+    }
 }
 
 pub fn create_test_token(namespace: &str, permission_read: bool, permission_write: bool) -> Token {
@@ -73,10 +97,27 @@ pub fn setup_database() {
 pub fn setup(mork_base_url: &str) {
     create_test_database_if_not_exists();
     env::set_var("METTA_KG_MORK_URL", mork_base_url);
-    env::set_var("POSTGRES_USER", "metta-kg-admin");
-    env::set_var("POSTGRES_PASSWORD", "metta-kg-password");
-    env::set_var("POSTGRES_DB", "metta-kg-test");
-    env::set_var("POSTGRES_HOST", "localhost");
+
+    #[cfg(all(feature = "postgres", not(feature = "sqlite")))]
+    {
+        env::set_var("POSTGRES_USER", "metta-kg-admin");
+        env::set_var("POSTGRES_PASSWORD", "metta-kg-password");
+        env::set_var("POSTGRES_DB", "metta-kg-test");
+        env::set_var("POSTGRES_HOST", "localhost");
+    }
+
+    #[cfg(feature = "sqlite")]
+    {
+        let temp_dir = SQLITE_TEMP_DIR
+            .get_or_init(|| TempDir::new().expect("Failed to create temp dir for SQLite test DB"));
+        let db_path = temp_dir
+            .path()
+            .join("test.db")
+            .to_str()
+            .unwrap()
+            .to_string();
+        env::set_var("DATABASE_URL", db_path);
+    }
 
     let mut connection = establish_connection();
     connection
