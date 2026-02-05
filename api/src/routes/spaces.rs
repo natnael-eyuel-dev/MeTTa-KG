@@ -298,28 +298,89 @@ pub async fn transform(
 /// The pattern: (transform (, (<source_namespace> (<prefix> $x))) (, (<target_namespace> $x)))
 /// Performs a subspace operation using SetOperationInput.
 /// source[0]: source namespace
-/// source[1]: prefix
+/// source[1]: prefix string (whitespace-separated tokens; e.g. "path Foo Baz")
 /// target[0]: target namespace
 #[post("/spaces/subspace", data = "<input>")]
-pub async fn subspace(
-    token: Token,
-    input: Json<Mm2InputMultiWithNamespace>,
-) -> Result<Json<bool>, Status> {
+pub async fn subspace(token: Token, input: Json<SetOperationInput>) -> Result<Json<bool>, Status> {
+    mod subspace_impl {
+        fn normalize_ns(ns: &str) -> String {
+            let trimmed = ns.trim();
+            let trimmed = trimmed.strip_prefix('/').unwrap_or(trimmed);
+            // Root namespace normalizes to empty string so it's a prefix of all namespaces.
+            if trimmed.is_empty() {
+                return "".to_string();
+            }
+            let mut s = trimmed.to_string();
+            if !s.ends_with('/') {
+                s.push('/');
+            }
+            s
+        }
+
+        pub(super) fn ns_is_within(token_ns: &str, requested: &str) -> bool {
+            let token_norm = normalize_ns(token_ns);
+            let req_norm = normalize_ns(requested);
+            req_norm.starts_with(&token_norm)
+        }
+
+        pub(super) fn split_prefix(prefix: &str) -> Vec<String> {
+            prefix
+                .split_whitespace()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
+    }
+
     let input = input.into_inner();
 
-    if input.patterns.len() != 1 || input.templates.len() != 1 {
+    if input.source.len() != 2 || input.target.len() != 1 {
         return Err(Status::BadRequest);
     }
 
-    if !input.clone().source_target_permissions(token) {
+    let src_ns = input.source[0].clone();
+    let prefix_raw = input.source[1].clone();
+    let dst_ns = input.target[0].clone();
+
+    // Explicit permission checks: read on source, write on target, and namespaces within token scope.
+    if !token.permission_read || !token.permission_write {
         return Err(Status::Unauthorized);
     }
+    if !subspace_impl::ns_is_within(&token.namespace, &src_ns)
+        || !subspace_impl::ns_is_within(&token.namespace, &dst_ns)
+    {
+        return Err(Status::Unauthorized);
+    }
+
+    let prefix = prefix_raw.trim();
+    if prefix.is_empty() {
+        return Err(Status::BadRequest);
+    }
+    // Keep prefix safe: disallow obvious injection / variables.
+    if prefix.contains('$') || prefix.contains('(') || prefix.contains(')') || prefix.contains('\n')
+    {
+        return Err(Status::BadRequest);
+    }
+    let prefix_tokens = subspace_impl::split_prefix(prefix);
+    if prefix_tokens.is_empty() {
+        return Err(Status::BadRequest);
+    }
+    // Build a fixed-prefix pattern that drops the prefix by projecting only the tail `$x`.
+    // Example prefix "path Foo Baz" => pattern "(path Foo Baz $x)".
+    let pattern_str = format!("({} $x)", prefix_tokens.join(" "));
+    let template_str = "$x".to_string();
 
     let mork_api_client = MorkApiClient::new();
     let request = TransformRequest::new().transform_input(
         TransformDetails::new()
-            .patterns(input.clone().patterns)
-            .templates(input.templates),
+            .patterns(vec![Mm2Cell::new_pattern(
+                pattern_str,
+                Namespace::from_path_string(&src_ns),
+            )])
+            .templates(vec![Mm2Cell::new_template(
+                template_str,
+                Namespace::from_path_string(&dst_ns),
+            )]),
     );
 
     // TODO: use server sent events instead
