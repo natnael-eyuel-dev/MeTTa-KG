@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { showToast } from "~/components/ui/Toast";
 import { subspace, isPathClear } from "~/lib/api";
-import { Mm2InputMultiWithNamespace, Item } from "~/lib/types";
+import { Item } from "~/lib/types";
 import { refreshSpace } from "../load/lib";
 
 export const [isLoading, setIsLoading] = createSignal(false);
@@ -78,20 +78,21 @@ export const executeSubspace = async (
       return false;
     }
 
-    const input: Mm2InputMultiWithNamespace = {
-      patterns: patterns.map((p) => ({
-        kind: "pattern" as const,
-        value: `(${p.value} $x)`,
-        namespace: p.namespace.filter((n) => n !== "" && n !== "/"),
-      })),
-      templates: templates.map((t) => ({
-        kind: "template" as const,
-        value: t.value,
-        namespace: t.namespace.filter((n) => n !== "" && n !== "/"),
-      })),
+    const toPath = (ns: string[]) => {
+      const parts = ns.filter((n) => n !== "" && n !== "/");
+      if (parts.length === 0) return "";
+      const p = parts.join("/");
+      return p.endsWith("/") ? p : `${p}/`;
     };
 
-    const success = await subspace(input);
+    const sourceNs = toPath(patterns[0]?.namespace || []);
+    const targetNs = toPath(templates[0]?.namespace || []);
+    const prefix = (patterns[0]?.value || "").trim();
+
+    const success = await subspace({
+      source: [sourceNs, prefix],
+      target: [targetNs],
+    });
     if (success) {
       showToast({
         title: "Subspace Operation Initiated",
