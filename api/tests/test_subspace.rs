@@ -1,10 +1,10 @@
 use httpmock::prelude::*;
 use metta_kg::cli::AppConfig;
-use metta_kg::mork_api::{Mm2Cell, Namespace};
 use metta_kg::rocket;
-use metta_kg::routes::spaces::Mm2InputMultiWithNamespace;
+use metta_kg::routes::spaces::SetOperationInput;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
+use rocket::serde::json::serde_json;
 use serial_test::serial;
 use std::env;
 
@@ -19,8 +19,12 @@ async fn test_subspace_transform() {
         return;
     }
     let server = MockServer::start();
-    server.mock(|when, then| {
-        when.method(POST).path("/transform");
+    // Expect the fixed-prefix transform to be sent to MORK.
+    let transform_mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/transform")
+            .body_contains("(__animaldata__ (path Foo Baz $x))")
+            .body_contains("(__outdata__ $x)");
         then.status(200).body("ok");
     });
     common::setup(&server.base_url());
@@ -34,27 +38,26 @@ async fn test_subspace_transform() {
         .await
         .expect("valid rocket instance");
 
-    let mm2_input = Mm2InputMultiWithNamespace {
-        patterns: vec![Mm2Cell::new_pattern(
-            "(path Foo Baz $x)".to_string(),
-            Namespace::from_path_string("/test/subspace/path"),
-        )],
-        templates: vec![Mm2Cell::new_template(
-            "(output $x)".to_string(),
-            Namespace::from_path_string("/test/subspace/output"),
-        )],
-    };
+    let body = serde_json::to_string(&SetOperationInput {
+        source: vec![
+            "test/subspace/animal/".to_string(),
+            "path Foo Baz".to_string(),
+        ],
+        target: vec!["test/subspace/out/".to_string()],
+    })
+    .unwrap();
 
     let response = client
-        .post("/api/spaces/transform")
+        .post("/api/spaces/subspace")
+        .body(body)
         .header(Header::new("authorization", token.code.clone()))
-        .json(&mm2_input)
         .dispatch()
         .await;
 
     assert_eq!(response.status(), Status::Ok);
     let body = response.into_string().await.expect("response body");
     assert_eq!(body, "true");
+    assert_eq!(transform_mock.hits(), 1);
 
     common::teardown_database();
 }
@@ -80,20 +83,18 @@ async fn test_subspace_endpoint_happy_path() {
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("rocket instance");
-    let payload = Mm2InputMultiWithNamespace {
-        patterns: vec![Mm2Cell::new_pattern(
-            "slkd".to_string(),
-            Namespace::from_path_string("/test/subspace/animal"),
-        )],
-        templates: vec![Mm2Cell::new_template(
-            "$x".to_string(),
-            Namespace::from_path_string("/test/subspace/car"),
-        )],
-    };
+    let body = serde_json::to_string(&SetOperationInput {
+        source: vec![
+            "test/subspace/animal/".to_string(),
+            "path Foo Baz".to_string(),
+        ],
+        target: vec!["test/subspace/out/".to_string()],
+    })
+    .unwrap();
     let response = client
         .post("/api/spaces/subspace")
+        .body(body)
         .header(Header::new("authorization", token.code.clone()))
-        .json(&payload)
         .dispatch()
         .await;
     assert_eq!(response.status(), Status::Ok);
@@ -121,20 +122,18 @@ async fn test_subspace_endpoint_leading_slash_normalization() {
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("rocket instance");
-    let payload = Mm2InputMultiWithNamespace {
-        patterns: vec![Mm2Cell::new_pattern(
-            "slkd".to_string(),
-            Namespace::from_path_string("/test/subspace/animal"),
-        )],
-        templates: vec![Mm2Cell::new_template(
-            "$x".to_string(),
-            Namespace::from_path_string("/test/subspace/car"),
-        )],
-    };
+    let body = serde_json::to_string(&SetOperationInput {
+        source: vec![
+            "/test/subspace/animal/".to_string(),
+            "path Foo Baz".to_string(),
+        ],
+        target: vec!["/test/subspace/out/".to_string()],
+    })
+    .unwrap();
     let response = client
         .post("/api/spaces/subspace")
+        .body(body)
         .header(Header::new("authorization", token.code.clone()))
-        .json(&payload)
         .dispatch()
         .await;
     assert_eq!(response.status(), Status::Ok);
@@ -148,7 +147,7 @@ async fn test_subspace_endpoint_empty_prefix() {
         return;
     }
     let server = MockServer::start();
-    server.mock(|when, then| {
+    let transform_mock = server.mock(|when, then| {
         when.method(POST).path("/transform");
         then.status(200).body("ok");
     });
@@ -162,24 +161,19 @@ async fn test_subspace_endpoint_empty_prefix() {
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("rocket instance");
-    let payload = Mm2InputMultiWithNamespace {
-        patterns: vec![Mm2Cell::new_pattern(
-            "".to_string(),
-            Namespace::from_path_string("/test/subspace/animal"),
-        )],
-        templates: vec![Mm2Cell::new_template(
-            "$x".to_string(),
-            Namespace::from_path_string("/test/subspace/car"),
-        )],
-    };
+    let body = serde_json::to_string(&SetOperationInput {
+        source: vec!["test/subspace/animal/".to_string(), "".to_string()],
+        target: vec!["test/subspace/out/".to_string()],
+    })
+    .unwrap();
     let response = client
         .post("/api/spaces/subspace")
+        .body(body)
         .header(Header::new("authorization", token.code.clone()))
-        .json(&payload)
         .dispatch()
         .await;
-    // Endpoint currently validates only counts + permissions; empty pattern is allowed.
-    assert_eq!(response.status(), Status::Ok);
+    assert_eq!(response.status(), Status::BadRequest);
+    assert_eq!(transform_mock.hits(), 0);
     common::teardown_database();
 }
 
@@ -190,7 +184,7 @@ async fn test_subspace_endpoint_unauthorized_namespace() {
         return;
     }
     let server = MockServer::start();
-    server.mock(|when, then| {
+    let transform_mock = server.mock(|when, then| {
         when.method(POST).path("/transform");
         then.status(200).body("ok");
     });
@@ -204,22 +198,21 @@ async fn test_subspace_endpoint_unauthorized_namespace() {
     let client = Client::tracked(rocket(&config).await)
         .await
         .expect("rocket instance");
-    let payload = Mm2InputMultiWithNamespace {
-        patterns: vec![Mm2Cell::new_pattern(
-            "slkd".to_string(),
-            Namespace::from_path_string("other/space/animal"),
-        )],
-        templates: vec![Mm2Cell::new_template(
-            "$x".to_string(),
-            Namespace::from_path_string("test/subspace/car"),
-        )],
-    };
+    let body = serde_json::to_string(&SetOperationInput {
+        source: vec![
+            "other/space/animal/".to_string(),
+            "path Foo Baz".to_string(),
+        ],
+        target: vec!["test/subspace/out/".to_string()],
+    })
+    .unwrap();
     let response = client
         .post("/api/spaces/subspace")
+        .body(body)
         .header(Header::new("authorization", token.code.clone()))
-        .json(&payload)
         .dispatch()
         .await;
     assert_eq!(response.status(), Status::Unauthorized);
+    assert_eq!(transform_mock.hits(), 0);
     common::teardown_database();
 }
