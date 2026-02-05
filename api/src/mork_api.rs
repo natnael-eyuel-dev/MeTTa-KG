@@ -14,19 +14,16 @@ pub enum ExportFormat {
     Raw,
 }
 
-/// A pattern inside a namespace
+/// Represents a pattern or a template with a namespace
 ///
 /// # Examples
 ///
 /// ```
-/// use api::mork_api::Pattern;
-/// use api::mork_api::Namespace;
+/// use metta_kg::mork_api::Mm2Cell;
+/// use metta_kg::mork_api::Namespace;
 ///
 /// let ns = Namespace::from_path_string("/parent/child/grandchild");
-/// let pattern = Pattern {
-///     pattern: "$x".to_string(),
-///     namespace: ns,
-/// };
+/// let pattern = Mm2Cell::new_pattern("$x".to_string(), ns);
 /// ```
 ///
 /// will be represented as
@@ -36,92 +33,70 @@ pub enum ExportFormat {
 /// ```
 ///
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Pattern {
-    pub pattern: String,
-    pub namespace: Namespace,
+#[serde(tag = "kind")]
+pub enum Mm2Cell {
+    #[serde(rename = "pattern")]
+    Pattern(Mm2CellValue),
+    #[serde(rename = "template")]
+    Template(Mm2CellValue),
 }
 
-impl Default for Pattern {
-    fn default() -> Self {
-        Pattern {
-            pattern: "$x".to_string(),
-            namespace: Namespace::default(),
-        }
-    }
-}
-
-impl Pattern {
-    pub fn new(pattern: String, namespace: Namespace) -> Self {
-        Pattern { pattern, namespace }
-    }
-
-    pub fn pattern(mut self, pattern: String) -> Self {
-        self.pattern = pattern;
-        self
-    }
-
-    pub fn namespace(mut self, ns: PathBuf) -> Self {
-        self.namespace = Namespace::from(ns);
-        self
-    }
-
-    pub fn build(&self) -> String {
-        self.namespace.with_namespace(&self.pattern)
-    }
-}
-
-/// A template inside a namespace similar to [`Pattern`]
-/// See [`Pattern`] for example
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Template {
-    pub template: String,
+pub struct Mm2CellValue {
+    pub value: String,
     pub namespace: Namespace,
 }
 
-impl Default for Template {
+impl Default for Mm2Cell {
     fn default() -> Self {
-        Template {
-            template: "$x".to_string(),
+        Mm2Cell::Pattern(Mm2CellValue {
+            value: "$x".to_string(),
             namespace: Namespace::default(),
-        }
+        })
     }
 }
 
-impl Template {
-    pub fn new(template: String, namespace: Namespace) -> Self {
-        Template {
-            template,
-            namespace,
+impl Mm2Cell {
+    pub fn new_pattern(value: String, namespace: Namespace) -> Self {
+        Mm2Cell::Pattern(Mm2CellValue { value, namespace })
+    }
+
+    pub fn new_template(value: String, namespace: Namespace) -> Self {
+        Mm2Cell::Template(Mm2CellValue { value, namespace })
+    }
+
+    pub fn value(&self) -> &str {
+        match self {
+            Mm2Cell::Pattern(p) | Mm2Cell::Template(p) => &p.value,
         }
     }
 
-    pub fn template(mut self, template: String) -> Self {
-        self.template = template;
-        self
-    }
-
-    pub fn namespace(mut self, ns: PathBuf) -> Self {
-        self.namespace = Namespace::from(ns);
-        self
+    pub fn namespace(&self) -> &Namespace {
+        match self {
+            Mm2Cell::Pattern(p) | Mm2Cell::Template(p) => &p.namespace,
+        }
     }
 
     pub fn build(&self) -> String {
-        self.namespace.with_namespace(&self.template)
+        self.namespace().with_namespace(self.value())
     }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransformDetails {
     /// the sub space as per playground convetions. ie. (/ ...)
-    pub patterns: Vec<Pattern>, // A sub space
-    pub templates: Vec<Template>,
+    pub patterns: Vec<Mm2Cell>, // A sub space
+    pub templates: Vec<Mm2Cell>,
 }
 
 impl Default for TransformDetails {
     fn default() -> Self {
         TransformDetails {
-            patterns: vec![Pattern::default()],
-            templates: vec![Template::default()],
+            patterns: vec![Mm2Cell::default()],
+            templates: vec![Mm2Cell::Template(Mm2CellValue {
+                value: "$x".to_string(),
+                namespace: Namespace::default(),
+            })],
         }
     }
 }
@@ -146,15 +121,19 @@ impl Namespace {
         Namespace { path: components }
     }
 
-    fn current_name(&self) -> String {
-        self.path
-            .last()
-            .cloned()
-            .unwrap_or_else(|| "root".to_string())
+    fn root_name(&self) -> String {
+        "root".to_string()
+    }
+
+    fn current_name(&self) -> Option<String> {
+        self.path.last().cloned()
     }
 
     fn data_tag(&self) -> String {
-        format!("{}a727d4f9-836a-4e4c-9480", self.current_name())
+        format!(
+            "__{}data__",
+            self.current_name().unwrap_or(self.root_name())
+        )
     }
 
     pub fn with_namespace(&self, value: &str) -> String {
@@ -165,6 +144,9 @@ impl Namespace {
         for name in self.path.iter().rev() {
             result = format!("({name} {result})");
         }
+
+        // add root namespace
+        result = format!("(__{}__ {})", self.root_name(), result);
 
         result
     }
@@ -196,12 +178,12 @@ impl TransformDetails {
         Default::default()
     }
 
-    pub fn patterns(mut self, patterns: Vec<Pattern>) -> Self {
+    pub fn patterns(mut self, patterns: Vec<Mm2Cell>) -> Self {
         self.patterns = patterns;
         self
     }
 
-    pub fn templates(mut self, templates: Vec<Template>) -> Self {
+    pub fn templates(mut self, templates: Vec<Mm2Cell>) -> Self {
         self.templates = templates;
         self
     }
@@ -244,7 +226,6 @@ impl MorkApiClient {
                         .header("Content-Type", "text/plain")
                         .body(body_str.clone());
                 } else {
-                    eprintln!("Upload endpoint called with non-string body type");
                     return Err(Status::InternalServerError);
                 }
             }
@@ -256,15 +237,9 @@ impl MorkApiClient {
         match http_request.send().await {
             Ok(resp) => match resp.text().await {
                 Ok(text) => Ok(text),
-                Err(e) => {
-                    eprintln!("Error reading Mork API response text: {e}");
-                    Err(Status::InternalServerError)
-                }
+                Err(_) => Err(Status::InternalServerError),
             },
-            Err(e) => {
-                eprintln!("Error sending request to Mork API: {e}");
-                Err(Status::InternalServerError)
-            }
+            Err(_) => Err(Status::InternalServerError),
         }
     }
 }
@@ -375,9 +350,9 @@ impl ImportRequest {
 
     /// Set the import structure, pattern is always `$x` and template is also
     /// `$x` by default which can be overridden
-    pub fn to(mut self, template: Template) -> Self {
+    pub fn to(mut self, template: Mm2Cell) -> Self {
         self.transform_input = TransformDetails::new()
-            .patterns(vec![Pattern::default()])
+            .patterns(vec![Mm2Cell::default()])
             .templates(vec![template]);
         self
     }
@@ -507,6 +482,48 @@ impl Request for ExploreRequest {
             self.token
         )
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct StatusRequest {
+    pub namespace: Namespace,
+    pattern: String,
+}
+
+impl StatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn namespace(mut self, ns: PathBuf) -> Self {
+        self.namespace = Namespace::from(ns);
+        self
+    }
+
+    pub fn pattern(mut self, pattern: String) -> Self {
+        self.pattern = pattern;
+        self
+    }
+}
+
+impl Request for StatusRequest {
+    type Body = ();
+
+    fn method(&self) -> Method {
+        Method::GET
+    }
+
+    fn path(&self) -> String {
+        format!(
+            "/status/{}",
+            urlencoding::encode(&self.namespace.with_namespace(&self.pattern))
+        )
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct StatusResponse {
+    pub status: String,
 }
 
 #[derive(Default)]
@@ -682,10 +699,11 @@ impl Request for ClearRequest {
 
 #[cfg(test)]
 mod tests {
-    use crate::mork_api::Namespace;
+    use crate::mork_api::*;
 
+    // ----------------------- Namespace -----------------------
     #[test]
-    fn test_namespace() {
+    fn test_basic_namespace() {
         let ns = Namespace::from_path_string("/parent/child/grandchild");
         assert_eq!(
             ns.path,
@@ -695,15 +713,125 @@ mod tests {
                 "grandchild".to_string()
             ]
         );
-        assert_eq!(ns.current_name(), "grandchild".to_string());
-        assert_eq!(ns.data_tag(), "grandchilda727d4f9-836a-4e4c-9480");
+        assert_eq!(ns.current_name().unwrap(), "grandchild".to_string());
+        assert_eq!(ns.data_tag(), "__grandchilddata__");
+        assert_eq!(
+            ns.with_namespace("$x"),
+            "(__root__ (parent (child (grandchild (__grandchilddata__ $x)))))"
+        );
     }
 
     #[test]
-    fn test_with_namespace() {
-        let ns = Namespace::from_path_string("/parent/child/grandchild");
-        let expected = "(parent (child (grandchild (grandchilda727d4f9-836a-4e4c-9480 $x))))";
+    fn test_empty_namespace() {
+        let ns = Namespace::from_path_string("/");
+        assert_eq!(ns.path, vec![] as Vec<String>);
+        assert_eq!(ns.current_name(), None);
+        assert_eq!(ns.data_tag(), "__rootdata__");
+        assert_eq!(ns.with_namespace("$x"), "(__root__ (__rootdata__ $x))");
 
-        assert_eq!(ns.with_namespace("$x"), expected);
+        let ns = Namespace::from_path_string("");
+        assert_eq!(ns.path, vec![] as Vec<String>);
+        assert_eq!(ns.current_name(), None);
+        assert_eq!(ns.data_tag(), "__rootdata__");
+        assert_eq!(ns.with_namespace("$x"), "(__root__ (__rootdata__ $x))");
+    }
+
+    #[test]
+    fn test_data_tag() {
+        let ns = Namespace::from_path_string("/parent/child/grandchild");
+        assert_eq!(ns.data_tag(), "__grandchilddata__");
+    }
+
+    #[test]
+    fn test_current_name() {
+        let ns = Namespace::from_path_string("/parent/child/grandchild");
+        assert_eq!(ns.current_name().unwrap(), "grandchild".to_string());
+
+        let ns = Namespace::from_path_string("/parent/child");
+        assert_eq!(ns.current_name().unwrap(), "child".to_string());
+
+        let ns = Namespace::from_path_string("/parent");
+        assert_eq!(ns.current_name().unwrap(), "parent".to_string());
+
+        let ns = Namespace::from_path_string("/");
+        assert_eq!(ns.current_name(), None);
+    }
+
+    // ----------------------- Mm2Cell -----------------------
+    #[test]
+    fn test_mm2_cell_default() {
+        let cell = Mm2Cell::default();
+        assert_eq!(cell.value(), "$x".to_string());
+        assert_eq!(cell.namespace().path, vec![] as Vec<String>);
+        assert_eq!(cell.build(), "(__root__ (__rootdata__ $x))");
+    }
+
+    #[test]
+    fn test_mm2_cell_basic() {
+        let cell = Mm2Cell::new_pattern(
+            "$x".to_string(),
+            Namespace::from_path_string("/parent/child"),
+        );
+        assert_eq!(cell.value(), "$x".to_string());
+        assert_eq!(
+            cell.namespace().path,
+            vec!["parent".to_string(), "child".to_string()]
+        );
+        assert_eq!(
+            cell.build(),
+            "(__root__ (parent (child (__childdata__ $x))))"
+        );
+    }
+
+    // ----------------------- TransformRequest -----------------------
+    #[test]
+    fn test_transform_request_multi_with_defaults() {
+        let request = TransformRequest::new();
+        assert_eq!(request.transform_input.patterns.len(), 1);
+        assert_eq!(request.transform_input.templates.len(), 1);
+        assert_eq!(
+            request.multi_patterns(),
+            "(, (__root__ (__rootdata__ $x)))".to_string()
+        );
+        assert_eq!(
+            request.multi_templates(),
+            "(, (__root__ (__rootdata__ $x)))".to_string()
+        );
+    }
+
+    #[test]
+    fn test_transform_request_multi_with_basic_values() {
+        let request = TransformRequest::new().transform_input(
+            TransformDetails::new()
+                .patterns(vec![
+                    Mm2Cell::new_pattern(
+                        "$x".to_string(),
+                        Namespace::from_path_string("/parent/child"),
+                    ),
+                    Mm2Cell::new_pattern(
+                        "$y".to_string(),
+                        Namespace::from_path_string("/parent/child/grandchild"),
+                    ),
+                ])
+                .templates(vec![
+                    Mm2Cell::new_template("$x".to_string(), Namespace::from_path_string("")),
+                    Mm2Cell::new_template(
+                        "$y".to_string(),
+                        Namespace::from_path_string("/parent/child/grandchild"),
+                    ),
+                    Mm2Cell::new_template("$z".to_string(), Namespace::from_path_string("/")),
+                ]),
+        );
+
+        assert_eq!(request.transform_input.patterns.len(), 2);
+        assert_eq!(request.transform_input.templates.len(), 3);
+        assert_eq!(
+            request.multi_patterns(),
+            "(, (__root__ (parent (child (__childdata__ $x)))) (__root__ (parent (child (grandchild (__grandchilddata__ $y))))))".to_string()
+        );
+        assert_eq!(
+            request.    multi_templates(),
+            "(, (__root__ (__rootdata__ $x)) (__root__ (parent (child (grandchild (__grandchilddata__ $y))))) (__root__ (__rootdata__ $z)))".to_string()
+                );
     }
 }

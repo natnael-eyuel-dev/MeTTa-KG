@@ -1,10 +1,11 @@
-use api::rocket;
-use api::routes::spaces::SetOperationInput;
 use httpmock::prelude::*;
+use metta_kg::rocket;
+use metta_kg::routes::spaces::SetOperationInput;
 use rocket::http::{Header, Status};
 use rocket::local::asynchronous::Client;
 use rocket::serde::json::serde_json;
 use serial_test::serial;
+use std::env;
 
 #[path = "common.rs"]
 mod common;
@@ -31,8 +32,14 @@ async fn test_composition_success() {
         then.status(200).body("Transform successful");
     });
 
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
     // Create client
-    let client = Client::tracked(rocket())
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -43,7 +50,7 @@ async fn test_composition_success() {
     .unwrap();
 
     let response = client
-        .post("/spaces/composition")
+        .post("/api/spaces/composition")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()
@@ -68,7 +75,13 @@ async fn test_non_existent_namespace() {
 
     let token = common::create_test_token("/test/", true, true);
 
-    let client = Client::tracked(rocket())
+    let config = metta_kg::cli::AppConfig {
+        database_url: env::var("DATABASE_URL").expect("DATABASE_URL not set"),
+        mork_server_url: server.base_url(),
+        mettakg_api_url: "http://localhost:8000".to_string(),
+    };
+
+    let client = Client::tracked(rocket(&config).await)
         .await
         .expect("valid rocket instance");
 
@@ -80,7 +93,7 @@ async fn test_non_existent_namespace() {
 
     // Path does not start with /test/
     let response = client
-        .post("/spaces/composition")
+        .post("/api/spaces/composition")
         .body(body)
         .header(Header::new("authorization", token.code.clone()))
         .dispatch()

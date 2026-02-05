@@ -1,13 +1,19 @@
 [package]
-name = "api"
+name = "metta-kg"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+description = "MeTTa Knowledge Graph implementation"
+repository = "https://github.com/arist76/MeTTa-KG"
+
+[package.metadata.dist]
+preferred-package = true
 
 [dependencies]
 serde = { version = "1.0.204", features = ["derive"] }
 rocket = { version = "0.5.1", features = ["json"] }
-diesel = { version = "2.2.2", features = ["postgres", "chrono"] }
-diesel_migrations = "2.3.0"
+diesel = { version = "2.2.2", default-features = false }
+diesel_migrations = { version = "2.2.0", default-features = false }
 dotenv = "0.15.0"
 jwt = "0.16.0"
 hmac = "0.12.1"
@@ -21,12 +27,31 @@ urlencoding = "2.1.3"
 openssl = { version = "0.10.72", features = ["vendored"] }
 pq-sys = { version = "0.6", features = ["bundled"] }
 url = "2.5.4"
+clap = { version = "4.5.47", features = ["derive"] }
+rust-embed = "8.0.0"
+tokio = { version = "1.38.0", features = ["rt", "macros", "time", "process"] }
+tempfile = "3.10.1"
+mime_guess = "2.0.4"
 
 [dev-dependencies]
 httpmock = "0.7.0"
-tokio = { version = "1.38.0", features = ["full"] }
 serial_test = "3.0"
 
 [features]
+default = ["sqlite"]
+sqlite = [
+    "diesel/sqlite",
+    "diesel/chrono",
+    "diesel/returning_clauses_for_sqlite_3_35",
+    "diesel_migrations/sqlite"
+]
+postgres = [
+    "diesel/postgres",
+    "diesel/chrono",
+    "diesel_migrations/postgres"
+]
 integration-tests = []
+
+[profile.dist]
+inherits = "release"
 all-features = ["integration-tests"]
